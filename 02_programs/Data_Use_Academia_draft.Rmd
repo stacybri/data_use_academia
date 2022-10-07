@@ -79,19 +79,11 @@ country_metadata <- wb_countries() %>%
 
 
 #read in country scores based on collapsing articles in mturk
+#This file was produced in the classifications_compare.ipynb in the 02_programs/misc file.
 country_score_mturk_df <- read_csv(paste0(output, "mturk_country_scores.csv")) %>%
   rename(iso3c=index) %>%
   left_join(country_metadata) 
-  #filter(!is.na(region))
 
-# #read in all country scores from 1 million articles
-# country_scores_df <- read_csv(paste0(output, "country_scores.csv")) %>%
-#   rename(iso3c=index) %>%
-#   left_join(country_metadata) %>%
-#   filter(!is.na(region)) %>%
-#   filter(region!="Aggregates") %>%
-#   filter(!is.na(papers)) %>%
-#   mutate(papers_estimate=papers/article_share)
 
 
 
@@ -106,8 +98,16 @@ gc()
 #articles_year_df <- fread(paste0(s3_output, "results_completed_updated.csv")) 
 
 #read in data from AWS
+
+tictoc::tic("fst")
 articles_year_df <- s3read_using(read.fst,object='s3://data-use-academia/03_output/results_completed_updated.fst') %>%
   as.data.table()
+tictoc::toc()
+
+# tictoc::tic("fst")
+# articles_year_df <- s3read_using(feather::read_feather,object='s3://data-use-academia/03_output/results_completed_updated.feather') %>%
+#   as.data.table()
+# tictoc::toc()
 
 correlates_df <- wbstats::wb_data(
   indicator=c("SP.POP.TOTL","NY.GDP.MKTP.PP.KD",'IQ.SPI.OVRL','NY.GDP.PCAP.PP.KD',
@@ -475,7 +475,7 @@ The project seeks to answer the following questions:
   1.	What is a feasible way to create a metric of data use by academia?    
   2.	What is the relationship between activities of the national statistical system and academic output?
 
-# Emprical Strategy
+# Empirical Strategy
 
 The empirical approach taken in this project is based on text mining using Natural Language Processing (NLP). The goal of NLP is to take raw text with no structure and extract information from that raw text in a structured way. In our case, NLP will be used to extract the country of study and whether the paper utilizes data. Each of these will be discussed in turn. 
 
@@ -718,7 +718,7 @@ plt_df <- plt_df %>%
 
 Among income groups, high income countries produced nearly 50% of all papers using data from 2000-2020, despite only making up around 17% of the world's population.  Despite making up around 1/3rd of the world population, low income countries only produce around 5% of articles using data.
 
-Figure. TOtal Number of articles using data by income
+Figure. Total Number of articles using data by income
 
 ```{r}
 
@@ -922,7 +922,7 @@ gdp_df_2019 <- country_scores_annual_df %>%
   filter(date==2019)
 
 mod <- lm(data_papers~ log(NY.GDP.MKTP.PP.KD) , data=gdp_df_2019) 
-summary(mod)
+#summary(mod)
 
 indicator <- 'data_papers'
 
