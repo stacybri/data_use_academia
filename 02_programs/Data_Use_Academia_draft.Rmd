@@ -1,0 +1,1535 @@
+---
+title: "Measuring the Use of Data in Academia"
+author: Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, Brian Stacy, and Xiaoyu
+  Wang
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+abstract: "A concentration of high-quality academic research can shed light on well-being
+  within a country, shape public policy, and monitor progress on goals. A key ingredient
+  to having an abundance of high-quality research in a country is timely, high quality,
+  and accessible data coming from the national statistical system. However, little
+  has been done to document how well statistical systems are supporting the use of
+  data by academia, and currently no global database exists documenting the use of
+  data by academia for statistical systems. This paper lays out an approach for producing
+  such a metric of data use by academia. Natural Language Processing (a form of text
+  mining) is applied to open-access research papers, from which a measure of data
+  use by academia is produced for each country. Compared to a set of aroun 3,500 human 
+  coded academic articles, the natural language processing approach produces country 
+  rankings that have a correlation of over 0.96 with the human coded approach.  After 
+  classifying more than 1 million academic articles, measures of the number of articles 
+  using data have a strong correlation between GDP, Population, and the Statistical Performance 
+  Indicator (SPI) overall score. Around 50% of all papers using data from 2000-2020 were produced 
+  by high income countries, while low income countries only produce around 5% of articles using data."
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	fig.height=6,
+	fig.width=9,
+	dpi = 350	
+)
+library(tidyverse)
+library(flextable)
+library(here)
+library(wbstats)
+library(dtplyr)
+library(data.table)
+library(caret)
+library(ggrepel)
+library(ggpmisc)
+library(ggthemes)
+library(ggtext)
+library(broom)
+library(estimatr)
+library(sandwich)
+library(lmtest)
+library(zoo)
+library(jsonlite)
+library(modelsummary)
+library(patchwork)
+library(fst)
+library(aws.s3)
+
+dir <- here()
+raw_data <- paste0(dir, "/01_raw_data/")
+output <- paste0(dir, "/03_output/")
+s3_output <- 'https://data-use-academia.s3.amazonaws.com/03_output/'#for the bigger files kept on S3
+#article share
+#share of articles that have been examined.  Will be used to estiamte total number by country
+article_share=11/100
+
+prim_col <- "#219ebc"
+maj_col <- "#023047"
+min_col <- "#8ecae6"
+```
+
+```{r data, include=FALSE}
+
+#read in world bank country metadata
+country_metadata <- wb_countries() %>%
+  filter(region!="Aggregates")
+
+
+
+#read in country scores based on collapsing articles in mturk
+country_score_mturk_df <- read_csv(paste0(output, "mturk_country_scores.csv")) %>%
+  rename(iso3c=index) %>%
+  left_join(country_metadata) 
+  #filter(!is.na(region))
+
+# #read in all country scores from 1 million articles
+# country_scores_df <- read_csv(paste0(output, "country_scores.csv")) %>%
+#   rename(iso3c=index) %>%
+#   left_join(country_metadata) %>%
+#   filter(!is.na(region)) %>%
+#   filter(region!="Aggregates") %>%
+#   filter(!is.na(papers)) %>%
+#   mutate(papers_estimate=papers/article_share)
+
+
+
+gc()
+
+```
+
+
+
+
+```{r countryscore, include=FALSE}
+#articles_year_df <- fread(paste0(s3_output, "results_completed_updated.csv")) 
+
+#read in data from AWS
+articles_year_df <- s3read_using(read.fst,object='s3://data-use-academia/03_output/results_completed_updated.fst')
+
+correlates_df <- wbstats::wb_data(
+  indicator=c("SP.POP.TOTL","NY.GDP.MKTP.PP.KD",'IQ.SPI.OVRL','NY.GDP.PCAP.PP.KD',
+              'IQ.SPI.PIL1','IQ.SPI.PIL2','IQ.SPI.PIL3',
+              'IQ.SPI.PIL4','IQ.SPI.PIL5'),
+  country = 'countries_only',
+  start_date=2000,
+  end_date=2020
+)
+
+countries_list <- colnames(articles_year_df[,12:262])
+#get number of articles by country
+articles_year_country_df <- articles_year_df[,lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
+
+articles_year_country_df <- articles_year_country_df %>% 
+  as_tibble() %>%
+  pivot_longer(
+    cols=countries_list,
+    names_to = 'iso3c',
+    values_to='papers'
+  ) %>%
+  left_join(country_metadata) %>%
+  filter(!is.na(country)) %>%
+  group_by(iso3c) %>%
+  arrange(desc(year)) %>%
+  mutate(papers_estimate=papers/article_share,
+         papers_estimate_3yr=rollmean(papers_estimate, k=3, align='left', fill=NA))
+
+#get number of articles using data by country
+articles_data_use_year_df <- articles_year_df[data_use=="Yes",lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
+
+articles_data_use_year_df <- articles_data_use_year_df %>% 
+  as_tibble() %>%
+  pivot_longer(
+    cols=countries_list,
+    names_to = 'iso3c',
+    values_to='data_papers'
+  ) %>%
+  left_join(country_metadata) %>%
+  filter(!is.na(country)) %>%
+  group_by(iso3c) %>%
+  arrange(desc(year)) %>%  
+  mutate(data_papers_estimate=data_papers/article_share,
+         data_papers_estimate_3yr=rollmean(data_papers_estimate, k=3, align='left', fill=NA),
+         data_papers_3yr=rollmean(data_papers, k=3, align='left', fill=NA))
+
+
+country_scores_annual_df <- articles_year_country_df %>%
+  left_join(articles_data_use_year_df)  %>%
+  filter(!is.na(country)) %>%
+  rename(date=year) %>%
+  left_join(correlates_df) 
+
+
+
+country_scores_2019_df <- country_scores_annual_df %>%
+  filter(date==2019)
+
+country_scores_aggregate_df <- country_scores_annual_df %>%
+  group_by(country, iso3c, region_iso3c, region, admin_region, income_level, lending_type) %>%
+  summarise(papers=sum(papers, na.rm=T),
+            papers_estimate=sum(papers_estimate, na.rm=T),
+            data_papers=sum(data_papers, na.rm=T),
+            data_papers_estimate=sum(data_papers_estimate, na.rm=T)) %>%
+  mutate(date=2019) %>%
+  left_join(correlates_df) %>%
+  ungroup() %>%
+  mutate(data_papers_pcap=1000000*data_papers/SP.POP.TOTL)
+  
+
+ncontry_database<-country_scores_aggregate_df %>% filter(papers>0) %>%
+  nrow()
+
+not_found <- country_scores_aggregate_df %>%
+  filter(papers==0 | is.na(papers)) %>%
+  filter(region!="Aggregates") %>%
+  pull(country)
+```
+
+```{r programs}
+
+#add equations to plots
+eq_plot_txt <- function(data, inp, var) {
+  eq <- lm_robust(inp ~ var, data=data, se_type='HC2')
+  coef <- round(coef(eq),2)
+  std_err <- round(sqrt(diag(vcov(eq))),2)
+  r_2<- round(summary(eq)$r.squared,2)
+  sprintf(" y = %.2f + %.2f x, R<sup>2</sup> = %.2f <br> (%.2f) <span style='color:white'> %s</span> (%.2f) ", coef[1], coef[2], r_2[1], std_err[1],"s", std_err[2])
+  
+}
+
+eq_plot_log_txt <- function(data, inp, var) {
+  eq <- lm_robust(inp ~ var, data=data, se_type='HC2')
+  coef <- round(coef(eq),1)
+  std_err <- round(sqrt(diag(vcov(eq))),1)
+  r_2<- round(summary(eq)$r.squared,2)
+  sprintf(" log(y) = %.2f + %.2f x, R<sup>2</sup> = %.2f <br> <span style='color:white'> %s </span> (%.2f) <span style='color:white'> %s </span> (%.2f) ", coef[1], coef[2], r_2[1], "Ss",std_err[1],"|", std_err[2])
+  
+}
+
+eq_plot_txt_precise <- function(data, inp, var) {
+  eq <- lm_robust(inp ~ var, data=data, se_type='HC2')
+  coef <- round(coef(eq),1)
+  std_err <- round(sqrt(diag(vcov(eq))),1)
+  r_2<- round(summary(eq)$r.squared,3)
+  sprintf(" y = %.1f + %.1f x, R<sup>2</sup> = %.3f <br> (%.1f) <span style='color:white'> %s</span> (%.1f) ", coef[1], coef[2], r_2[1], std_err[1],"s", std_err[2])
+}
+
+#modelsummary output
+gm <- tibble::tribble(
+  ~raw,        ~clean,          ~fmt,
+  "nobs",      "N",             0,
+  "r.squared", "R Sq.", 2)
+
+
+
+
+# define stle for ggplot based on BBC plotting styles
+bbc_style <- function() {
+  font <- "Helvetica"
+  
+  ggplot2::theme(
+    
+    #Text format:
+    #This sets the font, size, type and colour of text for the chart's title
+    plot.title = ggplot2::element_text(family=font,
+                                       size=24,
+                                       face="bold",
+                                       color="#222222"),
+    #This sets the font, size, type and colour of text for the chart's subtitle, as well as setting a margin between the title and the subtitle
+    plot.subtitle = ggplot2::element_text(family=font,
+                                          size=20,
+                                          margin=ggplot2::margin(9,0,9,0)),
+    plot.caption = ggplot2::element_blank(),
+    #This leaves the caption text element empty, because it is set elsewhere in the finalise plot function
+    
+    #Legend format
+    #This sets the position and alignment of the legend, removes a title and backround for it and sets the requirements for any text within the legend. The legend may often need some more manual tweaking when it comes to its exact position based on the plot coordinates.
+    legend.position = "top",
+    legend.text.align = 0,
+    legend.background = ggplot2::element_blank(),
+    legend.title = ggplot2::element_blank(),
+    legend.key = ggplot2::element_blank(),
+    legend.text = ggplot2::element_text(family=font,
+                                        size=14,
+                                        color="#222222"),
+    
+    #Axis format
+    #This sets the text font, size and colour for the axis test, as well as setting the margins and removes lines and ticks. In some cases, axis lines and axis ticks are things we would want to have in the chart - the cookbook shows examples of how to do so.
+    axis.title = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(family=font,
+                                      size=12,
+                                      color="#222222"),
+    axis.text.x = ggplot2::element_text(margin=ggplot2::margin(5, b = 10)),
+    axis.ticks = ggplot2::element_blank(),
+    axis.line = ggplot2::element_blank(),
+    
+    #Grid lines
+    #This removes all minor gridlines and adds major y gridlines. In many cases you will want to change this to remove y gridlines and add x gridlines. The cookbook shows you examples for doing so
+    panel.grid.minor = ggplot2::element_blank(),
+    panel.grid.major.x = ggplot2::element_line(color="#cbcbcb"),
+    panel.grid.major.y = ggplot2::element_blank(),
+    
+    #Blank background
+    #This sets the panel background as blank, removing the standard grey ggplot background colour from the plot
+    panel.background = ggplot2::element_blank(),
+    
+    #Strip background (#This sets the panel background for facet-wrapped plots to white, removing the standard grey ggplot background colour and sets the title size of the facet-wrap title to font size 22)
+    strip.background = ggplot2::element_rect(fill="white"),
+    strip.text = ggplot2::element_text(size  = 22,  hjust = 0)
+  )
+}
+
+```
+
+```{r mapper}
+
+#For mapping the result
+# quality = "high"
+# maps <- wbgmaps::wbgmaps[[quality]]
+#load world bank map data
+load(paste0(raw_data, '/misc/maps.Rdata'))
+standard_crop_wintri <- function() {
+  l <- list(
+    left=-12000000, right=16396891,
+    top=9400000, bottom=-6500000
+  )
+  l$xlim <- c(l$left, l$right)
+  l$ylim <- c(l$bottom, l$top)
+  l
+}
+
+
+
+spi_mapper  <- function(data, indicator, title) {
+  
+ indicator<-indicator
+
+  map_df <- get(data) %>%
+    filter(date==max(date, na.rm=T)) %>%
+    filter(!(country %in% c('Greenland'))) %>% #drop a few countries for which we do not collect data.
+    group_by( country) %>%
+    #summarise(across(!! indicator,last)) %>%
+  rename(n_papers=!! indicator) %>%
+  mutate(n_papers=if_else(is.na(n_papers), as.numeric(NA), as.numeric(n_papers)))    %>%
+  filter(region!="Aggregates")  
+  
+  
+   p1 <- ggplot() +
+    geom_map(data = map_df, aes(map_id = iso3c, fill = n_papers), map = maps$countries) + 
+    geom_polygon(data = maps$disputed, aes(long, lat, group = group, map_id = id), fill = "grey80") + 
+    geom_polygon(data = maps$lakes, aes(long, lat, group = group), fill = "white")  +
+     geom_path(data = maps$boundaries,
+               aes(long, lat, group = group),
+               color = "white",
+               size = 0.3,
+               lineend = maps$boundaries$lineend,
+              linetype = maps$boundaries$linetype) +
+    scale_x_continuous(expand = c(0, 0), limits = standard_crop_wintri()$xlim) +
+    scale_y_continuous(expand = c(0, 0), limits = standard_crop_wintri()$ylim) +
+    scale_fill_distiller(palette = "RdYlGn",
+                       direction=1,
+                       na.value='grey',
+                       trans="log10")  +
+    coord_equal() +
+    theme_map(base_size=12) +
+    labs(
+      title=str_wrap(title,100),
+      caption = 'Source: SPI',
+      fill='Papers'
+    )
+  
+
+  print(p1)
+
+}
+
+spi_mapper_quintile  <- function(data, indicator, title) {
+  
+ indicator<-indicator
+
+  map_df <- get(data) %>%
+    filter(date==max(date, na.rm=T)) %>%
+    filter(!(country %in% c('Greenland'))) %>% #drop a few countries for which we do not collect data.
+    group_by( country) %>%
+    #summarise(across(!! indicator,last)) %>%
+  rename(n_papers=!! indicator) %>%
+  mutate(n_papers=if_else(is.na(n_papers), as.numeric(NA), as.numeric(n_papers)))    %>%
+  filter(region!="Aggregates")  
+  
+  spi_groups_quantiles <- quantile(map_df$n_papers, probs=c(1,2,3,4)/5,na.rm=T)
+  
+  SPI_map <- map_df %>%
+    mutate(spi_groups=case_when(
+      between(n_papers, spi_groups_quantiles[4],max(map_df$n_papers)) ~ "Top Quintile",
+      between(n_papers, spi_groups_quantiles[3],spi_groups_quantiles[4]) ~ "4th Quintile",
+      between(n_papers, spi_groups_quantiles[2],spi_groups_quantiles[3]) ~ "3rd Quintile",
+      between(n_papers, spi_groups_quantiles[1],spi_groups_quantiles[2]) ~ "2nd Quintile",
+      between(n_papers, 0,spi_groups_quantiles[1]) ~ "Bottom 20%"
+      
+    )) %>%
+    mutate(spi_groups=factor(spi_groups, 
+                             levels=c("Top Quintile","4th Quintile","3rd Quintile","2nd Quintile","Bottom 20%" )))  
+  
+  #set color pallete
+  col_pal <- c("#2ec4b6","#acece7","#f1dc76","#ffbf69","#ff9f1c")  
+  names(col_pal) <- c("Top Quintile","4th Quintile","3rd Quintile","2nd Quintile","Bottom 20%" ) 
+  
+  
+ p1<-ggplot() +
+    geom_map(data = SPI_map, aes(map_id = iso3c, fill = spi_groups), map = maps$countries) + 
+    geom_polygon(data = maps$disputed, aes(long, lat, group = group, map_id = id), fill = "grey80") + 
+    geom_polygon(data = maps$lakes, aes(long, lat, group = group), fill = "white")  +
+    geom_path(data = maps$boundaries,
+              aes(long, lat, group = group),
+              color = "white",
+              size = 0.3,
+              lineend = maps$boundaries$lineend,
+              linetype = maps$boundaries$linetype) +
+    scale_x_continuous(expand = c(0, 0), limits = standard_crop_wintri()$xlim) +
+    scale_y_continuous(expand = c(0, 0), limits = standard_crop_wintri()$ylim) +
+    scale_fill_manual(
+      name='Papers per capita',
+      values=col_pal,
+      na.value='grey'
+    ) +
+    coord_equal() +
+    theme_map(base_size=12) +
+    labs(
+      title=str_wrap(title,100),
+      caption = 'Source: SPI',
+      fill='Papers per capita'
+    )
+  
+
+  print(p1)
+
+}
+
+```
+
+
+
+```{r rows}
+#calculate number of countries
+mturk_cntry_num <- nrow(country_score_mturk_df)
+cntry_num <- nrow(country_scores_2019_df)
+
+#calculate number of articles
+article_num <- nrow(articles_year_df)
+```
+
+
+```{r duplicates}
+
+#a set of duplicate articles were double coded.  Identify these
+duplicates <- duplicated((mturk_articles_df %>% select(abstract, title)))
+
+mturk_double_code_df <- mturk_articles_df %>%
+  filter(duplicates)
+
+mturk_articles_df <- mturk_articles_df %>%
+  filter(!duplicates) #keep just one code per article, so removing
+
+#count of rows
+duplicates_num <- nrow(mturk_double_code_df)
+mturk_num <- nrow(mturk_articles_df)
+
+```
+
+
+```{r mturk}
+
+#read in mturk submissions data
+file_names <- list.files(paste0(raw_data, "/classification_set/"), full.names = FALSE) #where you have your files
+
+
+
+if (exists('mturk_df')) {
+  remove(mturk_df)
+}
+
+for (i in file_names) {
+  temp <- read_csv(paste0(raw_data, "/classification_set/",i)) %>%
+    mutate(MaxAssignments=as.numeric(MaxAssignments),
+           AssignmentDurationInSeconds=as.numeric(AssignmentDurationInSeconds),
+           AutoApprovalDelayInSeconds=as.numeric(AutoApprovalDelayInSeconds),
+           WorkTimeInSeconds=as.numeric(WorkTimeInSeconds))
+  
+  if (!exists('mturk_df')) {
+  mturk_df <- temp
+  } else {
+    mturk_df <- mturk_df %>%
+      bind_rows(temp)
+  }
+}
+
+raters <- length(unique(mturk_df$WorkerId))
+
+work_time_mn <- median(mturk_df$WorkTimeInSeconds)/60
+
+```
+
+# Introduction
+
+International donors have recognized the important role that national statistical systems play in producing high quality data related to development, such as in producing censuses, surveys, indicators, and in providing users data services. According to PARIS21, the international community funded around `$`2 billion in statistical development activities between 2016 and 2018 (@yu_tian_partner_2020). The World Bank alone has funded `$`610 million for those activities in that period.  These investments are typically justified as a means to improve evidence-based policy making in low- and middle-income countries. 
+
+Academia plays a key role in producing evidence-based policy recommendations and is a strong beneficiary of the existence of productive national statistical systems. High quality population censuses, for instance, are key for producing a representative sample in a survey that is part of a research study. Microdata produced by the national statistical system in the form of household income and expenditure surveys, agriculture surveys, or demographic and health surveys are routinely used as part of academic studies. A dysfunctional system that is not producing the key data sources or indicators, does not follow basic international classifications to make data comparable, or does not have the data services in place to connect users of the data to the products that are produced, may have less engagement by academia and consequently have a deficit in research on problems facing the country.
+
+The World Bank recognized the importance of academia as a user of the national statistical system in the recently released Statistical Performance Indicators (SPI). The SPI framework assesses the maturity and performance of national statistical systems in five key areas referred to as pillars (@dang2021statistical). The first pillar is on data use. It considers the extent that a national statistical system produces products that are meeting the needs of users, and one of the dimensions of this pillar is on data use by academia. However, as acknowledged in the report, measures of data use by academia are in an embryonic stage. Without measures highlighting deficiencies in the usage of data, it is difficult to spotlight problem areas, and countries may lack the information needed to prioritize investments in statistics.
+
+  Some previous academic research has highlighted gaps between countries in academic research output. For instance, @robinson2006countries, @das2013us, and @porteous2020research examine which countries are studied most by economists using the EconLit database. These studies note that the distribution of economic research is highly uneven across countries. @cameron2016growth and @sabet2018impact extend this to note that impact evaluations are highly uneven across countries as well. However, these studies are narrowly focused on publication in economics journals and the authors are not updating their rankings across countries on an annual basis. Another issue is the EconLit database contains data for only 74 countries.
+  
+Advances in Natural Language Processing, based on machine learning, and new data sources have opened up new approaches to measuring academic data use at low costs. Organizations such as Semantic Scholar Open Research Corpus (s2orc) have digitized millions of research papers produced around the world, including in fields other than economics, and opened up APIs for accessing the raw text of these documents (@lo-etal-2020-s2orc). The s2orc dataset also includes data from `r ncontry_database` countries, which is much greater than the 74 countries covered by EconLit.^[The World Development Indicators includes 217 countries.  The country not found with a paper in the WDI is `r not_found`.] Natural Language Processing algorithms have been developed to efficiently parse millions of documents to classify documents. For instance, @hansen2018transparency, published in the Quarterly Journal of Economics, processed 149 transcripts from the Federal Reserve to study how Federal Reserve board members react to transparency in terms of topic coverage. 
+			
+Using these tools, we propose to develop a methodology for measuring data use by academia. These measures will then be used to study the relationship between products produced by the national statistical system and research output, 
+
+The project seeks to answer the following questions: 
+
+  1.	What is a feasible way to create a metric of data use by academia?    
+  2.	What is the relationship between activities of the national statistical system and academic output?
+
+# Emprical Strategy
+
+The empirical approach taken in this project is based on text mining using Natural Language Processing (NLP). The goal of NLP is to take raw text with no structure and extract information from that raw text in a structured way. In our case, NLP will be used to extract the country of study and whether the paper utilizes data. Each of these will be discussed in turn. 
+
+Before proceeding to a discussion of the NLP techniques a brief discussion will be given of the primary dataset. The primary dataset for this analysis will be the s2orc dataset containing the raw text of over 80 million open access articles.  These include working papers as well as published articles. The s2orc team collects open access research outputs based on institutional repositories indexed by Semantic Scholar. This data source will be described in more detail below, but the key is that this data source provides the title and abstract, as well as other metadata information about the paper such as the subject, journal, and citation counts, through an API that facilitates automated access to these articles through a computer script.
+
+First, the country or countries of study in each academic article will be determined by using two approaches based on the information in the title, abstract, or topic fields. The first does regular expression searches based on the presence of ISO3166 country names. For this approach, a defined set of country names are compiled and the presence of these country names is checked within the title, abstract, or topic fields. Advantages of this approach are that it is transparent, widely used in social science research, and extends to other languages easily. A downside of this approach is that there are potential exclusion errors, such as if the country’s spelling is non-standard.
+
+A second approach is based on Named Entity Recognition (NER), which uses machine learning to identify objects from text, using the Python library spaCy. SpaCy has been used by a number of academic studies to classify text, such @kleinberg2018using & @shelar2020named. The Named Entity Recognition algorithm splits text into a set of named entities. To give an example, the text “Apple is looking at buying U.K. startup for `$`1 billion”, can be classified as “Apple [ORG] is looking at buying U.K. [Country] startup for $1 billion [Monetary value]”. For the purposes of this study, NER will be used to identify countries of study in the academic articles. The spaCy python package supports multiple languages and has been trained on multiple spellings of countries and so overcomes some of the limitations of the regular expression approach.
+
+If a country shows up either through the regular expression search or the search using NER, the country will be linked to that article. Using this approach, it may also be possible to acquire additional information such as the topic of study (i.e. health, education, trade), which could give further breakdowns of academic data use. 
+
+Second, whether the paper makes use of data will be classified. Again two approaches will be tried. First, a regular expression search approach to classify papers will be applied again. In this case, the algorithm will check for the presence of key words, such as “data”, “survey”, “census” in the text of articles. Second, supervised machine learning, where the team creates a precise definition of data use, manually labels 3500 publications randomly selected, and then trains a model on this data will also be explored.
+
+While text mining based on Natural Language Processing has been used successfully in other contexts, such as the @hansen2018transparency analysis of Federal Reserve transcripts, it is not guaranteed that the approach will succeed. In order to determine whether the approaches tested in this paper are successful, the team will manually classify 3500 randomly selected publications based on the country of study and whether the article makes use of data in the analysis.   A key research output of this project will be the extent that the classifications of country of study and use of data match those classified manually by the team. 
+
+Assuming the approach to classifying the country of study and use of data are successful, three measures of data use by academia will be constructed as follows. These measures will be produced for countries on an annual basis, and a time series will be created based on the year of the publication of the article dating back to year 2002, which is the start of the s2orc dataset time series. The first use of data measure is a per capita measure, a second measure will be a regression adjusted measure that adjust for other factors in the country such as the population size and GDP, and a third measure we will consider is the share of papers on a country that use data.
+
+
+
+# Data
+
+The primary data source for academic articles comes from the Semantic Scholar Open Research Corpus (S2ORC) (@lo-etal-2020-s2orc). The corpus contains more than 80 million English language academic papers across multiple disciplines which contain . The papers included in the Semantic Scholar corpus are gathered directly from publishers, from open archives such as arXiv or PubMed, and crawled from the internet.  
+
+
+The S2orc corpus contains more than 80 million articles.  Some restrictions were placed on the articles to make them usable and relevant to measuring whether the statistical system is releasing usable data for academia.  First, only articles with an abstract and parsed PDF or latex file are included in the analysis. The full text of the abstract is necessary to classify the country of study and whether the article uses data.  The parsed PDF and latex file are important for extracting important information like the data of publication and field of study.  This restriction eliminated a large number of articles in the original corpus  Around 30 million articles remain after keeping only articles with a parsable PDF, and around 26% of that 30 million are eliminated when keep articles with an abstract.  Second, only articles from the year 2000 to 2020 were considered.  This restriction eliminated an additional 9% of articles.  Finally, articles from the following fields of study were excluded, as they were unlikely to involve data produced by the national statistical system:  Biology, Chemistry, Engineering, Physics, Materials Science, Environmental Science, Geology, History, Philosophy, Math, Computer Science, and Art.  Fields that *are* included are: Economics, Political Science, Business, Sociology, Medicine, and Psychology.  This third restriction eliminated around 34% of articles.  From an initial corpus of 136 million articles, this resulted in a final corpus of around 10 million articles.
+
+A set of 3,500 articles were then randomly selected from this set of 10 million for human classification by raters using the Mechanical Turk service.
+The raters were chosen from a pool of [Mechanical Turk master workers](https://www.mturk.com/worker/help).  A master worker is a rater who has been designated a Mechanical Turk Masters qualification by Amazon.  The workers are designated as a master worker on the basis of prior submissions, with a track record of having submitted high quality results, based on approver rates, tenure, and variety of work performed.  `r raters` unique raters were used to classify the articles.  The median amount of time that a rater spent on an article, measured as the time between when the article was accepted by the rater and when the rating was submitted was `r round(work_time_mn,1)` minutes.  If human raters were used, rather than machine learning tools, then the corpus of `r scales::comma(article_num)` articles examined in this study would take `r scales::comma(article_num*work_time_mn/60)` hours of human work time to review at a cost of `r scales::dollar(3*article_num)`, which assumes a cost of $3 per article as paid to Mturk workers during the team's article classification exercise described.
+
+Finally, due to the intensive computer resources required, a set of `r scales::comma(nrow(articles_year_df))` articles were randomly selected from the 10 million articles in our restricted corpus as a convenience sample.  Summary statistics of the final sample of 1 million articles are available in the Table below.
+
+Table. Summary Statistics of Article Corpus. 2000-2020
+```{r eval=FALSE, include=FALSE}
+
+gg_bars <- function(z) {
+  z <- na.omit(z)
+  z <- data.frame(x = seq_along(z), z = z, w = z < 0)
+  ggplot(z, aes(x = x, y = z, fill = w)) +
+    geom_col(show.legend = FALSE) +
+    theme_void()
+}
+
+sumstats_tab <- articles_year_df %>%
+  transmute(
+    `Year of Publication`=year,
+    `Published in Journal (1=yes)`=as.numeric(journal==""),
+    Field=group_name
+  ) %>%
+  group_by(Field) %>%
+  summarise(across(c('Published in Journal (1=yes)'),~round(mean(.),2)),
+            Articles=n()) %>%
+  ungroup() %>%
+  mutate(`Share of Articles`=100*round(Articles/sum(Articles),3)) %>%
+  as_tibble()
+  
+sumstats_year <- articles_year_df %>%
+  transmute(
+    `Year of Publication`=year,
+    Field=group_name
+  ) %>%
+  group_by(Field,`Year of Publication`) %>%
+  summarise(`Articles per Year`=n()) 
+
+dat <- as.data.table(sumstats_year)
+z <- dat[,
+  lapply(.SD, function(x) list(gg_bars(x))),
+  by = c("Field"), .SDcols = c("Articles per Year")
+]
+
+z <- merge(z, as.data.table(sumstats_tab))
+
+ft <- flextable(z)
+ft <- compose(ft, 
+    j = c("Articles per Year"),
+    value = as_paragraph(gg_chunk(value = ., height = .15, width = 1)),
+    use_dot = TRUE
+  )
+ft %>%
+  autofit()
+
+
+
+  
+```
+
+```{r}
+sumstats_tab <- articles_year_df %>%
+  transmute(
+    `Year of Publication`=year,
+    `Published in Journal (1=yes)`=as.numeric(journal==""),
+    Field=group_name
+  ) %>%
+  group_by(Field) %>%
+  summarise(across(c('Published in Journal (1=yes)'),~round(mean(.),2)),
+            Articles=n()) %>%
+  ungroup() %>%
+  mutate(`Share of Articles`=100*round(Articles/sum(Articles),3)) %>%
+  as_tibble()
+  
+sumstats_tab %>%
+  flextable() %>%
+  autofit()
+```
+
+
+
+# Machine Learning Approach
+
+Add in Xiaoyu's description.
+
+After training and validating the model, the country (or countries) of study and whether the article article uses data are classified for a corpus of `r scales::comma(nrow(articles_year_df))` academic articles.  Using this classified dataset of articles, a new dataset was constructed with the number of articles using data per country.  Countries are organized to match the countries in the World Bank's World Development Indicators.  In total, article counts are available for 218 countries.
+
+# Analysis
+
+## Comparison of Mturk Ratings of Articles to Machine Learning Approach
+
+
+```{r}
+mturk_cor <- cor(country_score_mturk_df$data_use_class_papers, country_score_mturk_df$data_use_mturk_papers)
+
+reg_df <- country_scores_aggregate_df %>% filter(data_papers_estimate>0)
+
+
+
+
+```
+
+In what follows, a comparison is given between the human raters of the articles, who were hired through Amazon Mechanical Turk (MTurk), and the predictions of the country of study and whether the article uses data from the machine learning model.  To do so, a set of 3,500 articles are examined that were hand coded by the MTurk workers.  This set of 3,500 articles is then fed to the machine learning model, from which the country of study and data use status are identified.
+
+Among this set of 3,500 articles, we can see the correlation between the number of articles written about each country using the two approaches and percentage of articles classified as using data.  The Pearson between the human raters and the NLP predictions is `r round(mturk_cor,2)`.  The figure below shows the scatterplot between the human classifications and the NLP classifications.  
+
+While there is strong agreement between the two approaches, there are some notable differences.  First, some countries are notably over-represented among human classifiers compared to those produced using the machine learning model. One is North Korea, which was selected by human raters nine times, while the NLP model selected only 1 paper as related to North Korea.  Upon inspecting the nine articles identified by the Amazon MTurk classifiers, it appears that these articles were misclassified and were actually referring to South Korea.  Additionally, the United Kingdom and United States are notable outliers.  It is possible other contextual information in the title or abstract of the article, such as mention of a specific policy related to the country, led the human classifiers to classify more articles than could be identified using the regular expressions search for country names and the named entity recognition tools.
+
+
+Figure. Comparison of Human Classifications of Data Use to NLP Predictions
+```{r}
+
+p1 <- ggplot(country_score_mturk_df, aes(x=data_use_class_papers, y=data_use_mturk_papers)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 2, y = 1000,label = eq_plot_txt(country_score_mturk_df, data_use_mturk_papers, data_use_class_papers), hjust=0.2)
+  ) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  geom_text_repel(aes(label=country)) +
+  ylab("Mturk Classification") +
+  xlab("Machine Learning Classification") +
+  bbc_style()
+
+p1
+```
+
+
+
+
+## Results
+
+```{r}
+nf_df <- articles_year_df %>%
+  filter(nf==1) %>%
+  as_tibble()
+
+nf_stat <- nrow(articles_year_df)-nrow(nf_df)
+```
+
+
+Using the NLP model results, the number of articles using data produced for each country is shown in the figure below.  Around `r scales::comma(nf_stat)` articles could be identified with a particular country.   The two countries with the largest number of papers using data produced are the United States (12,273 papers) and China (12,063) papers between 2000 and 2020.  India, Australia, and Japan are third, fourth, and fifth respectively with 6,481, 5,463, and 5,300 papers respectively.
+
+Figure. Number of Articles using Data by Country (2000-2020)
+```{r}
+spi_mapper('country_scores_aggregate_df', 'data_papers', 'Number of Papers Using Data (2000-2020). Log Scale.')
+```
+
+
+```{r}
+#spi_mapper_quintile('country_scores_aggregate_df', 'data_papers_pcap', 'Number of Papers Using Data per capita')
+```
+
+The numbers in the figure below shows the number of articles using data produced per million people in each region. When looking by region, Europe and Central Asia had the largest number of articles using data produced on a per capita basis with around 470 articles produced per million.  North America is second with around 460 per million.  South Asia produced the fewest number of papers per million with only around 65 articles produced per million persons.  
+
+
+Figure. Number of articles using data by region per million persons
+
+```{r}
+
+plt_df <- country_scores_aggregate_df %>%
+  left_join(correlates_df) %>%
+  group_by(region) %>%
+  summarise(data_papers=sum(data_papers),
+            pop=sum(SP.POP.TOTL, na.rm=T)) %>%
+  mutate(data_papers_pcap=10000000*data_papers/pop) %>%
+  ungroup() %>%
+  arrange(data_papers_pcap)
+
+plt_df <- plt_df %>%
+  mutate(region=factor(region, levels=unique(plt_df$region)))
+
+
+  ggplot(plt_df, aes(y=data_papers_pcap, x=region, group=region)) +
+    geom_col(fill=prim_col) +
+    geom_text(aes(label=scales::comma(data_papers_pcap)), hjust=-0.1) +
+    ylab('Number of Papers using Data per capita') +
+    xlab("") +
+    scale_y_continuous(label=scales::comma) +
+    bbc_style() +
+    coord_flip() +
+    expand_limits(y=c(0,500))
+```
+
+<!-- When looking at the number of articles produced per billion dollars of GDP, Sub-Saharan Africa is the leader with close to 50 articles produced per billion dollars of GDP.  GDP numbers are adjusted using PPPs.   -->
+
+<!-- Figure. Number of articles using data by region per billion $ of GDP -->
+
+```{r eval=FALSE, include=FALSE}
+
+plt_df <- country_scores_aggregate_df %>%
+  left_join(correlates_df) %>%
+  group_by(region) %>%
+  summarise(data_papers=sum(data_papers),
+            gdp=sum(NY.GDP.MKTP.PP.KD, na.rm=T)) %>%
+  mutate(data_papers_gdp=10000000000*data_papers/gdp) %>%
+  ungroup() %>%
+  arrange(data_papers_gdp)
+
+plt_df <- plt_df %>%
+  mutate(region=factor(region, levels=unique(plt_df$region)))
+
+
+  ggplot(plt_df, aes(y=data_papers_gdp, x=region, group=region)) +
+    geom_col(fill=prim_col) +
+    geom_text(aes(label=scales::comma(data_papers_gdp)), hjust=-0.1) +
+    ylab('Number of Papers using Data per billion $ of GDP') +
+    xlab("") +
+    scale_y_continuous(label=scales::comma) +
+    bbc_style() +
+    coord_flip() +
+    expand_limits(y=c(0,100))
+```
+
+Among income groups, high income countries produced nearly 50% of all papers using data from 2000-2020, despite only making up around 17% of the world's population.  Despite making up around 1/3rd of the world population, low income countries only produce around 5% of articles using data.
+
+Figure. TOtal Number of articles using data by income
+
+```{r}
+
+pop_income_df <- correlates_df %>%
+  left_join(country_metadata) %>%
+  group_by(income_level) %>%
+  summarise(pop=sum(SP.POP.TOTL, na.rm=T)) %>%
+  ungroup() %>%
+  mutate(share=pop/sum(pop))
+
+country_scores_aggregate_df %>%
+  group_by(income_level) %>%
+  summarise(data_papers=sum(data_papers)) %>%
+  ungroup() %>%
+  mutate(share=data_papers/sum(data_papers)) %>%
+  filter(income_level!="Not classified") %>%
+  mutate(income_level=factor(income_level, levels=c( "Low income", "Lower middle income", "Upper middle income","High income"))) %>%
+  ggplot( aes(y=data_papers, x=income_level, group=income_level)) +
+    geom_col(fill=min_col) +
+    geom_text(aes(label=scales::comma(data_papers)), hjust=-0.1) +
+    ylab('Number of Papers using Data') +
+    xlab("") +
+    scale_y_continuous(label=scales::comma) +
+    bbc_style() +
+    coord_flip() +
+    expand_limits(y=c(0,90000))
+```
+
+
+The chart below shows the number of articles using data by region over time.  Note that only papers released prior to April 2020 are included in the S2ORC dataset currently, so in the year 2020 there is a reduced number of papers released.
+
+Figure. Articles Using Data over Time.
+```{r}
+country_scores_annual_df %>%
+  filter(date<=2020) %>%
+  group_by(region, date) %>%
+  summarise(data_papers=sum(data_papers)) %>%
+  ggplot(aes(x=date, y=data_papers, group=region, color=region)) +
+  geom_line() +
+  bbc_style()
+```
+
+There is a strong relationship between the number of articles produced using data and GDP, Population, and the SPI Overall score of a country.  Bivariate Regression coefficients from a regression of log number of data use papers on GDP, Population, and the SPI overall score is shown within the figures.  In the case of GDP and population, the regressions are on logged values of GDP or population as the case may be.
+
+For GDP, the figures indicate an elasticity of 0.6, meaning that for instance a 10% increase in GDP translate into a 6% increase in academic articles using data.  Log GDP explains 77% of the variation ($R^2=0.77$) in the number of articles produced using data.  The elasticity with respect to population is similar in magnitude to that of GDP, and population alone explains 69% of the variation in academic articles using data.
+
+SPI overall scores, a measure of statistical performance, also are strongly predictive of academic output using data.  A 10 point increase in SPI scores, which is approximately the same as moving from the median SPI score to the 65th percentile, translates into around a .5% increase in the number of articles using data.
+
+Figure. Relationship between Papers using Data and Development Outcomes
+
+```{r, fig.width=8, fig.height=12}
+
+#cor(reg_df$NY.GDP.MKTP.PP.KD, reg_df$papers_estimate, use='pairwise.complete.obs')
+
+p1 <- ggplot(reg_df, aes(y=data_papers, x=NY.GDP.MKTP.PP.KD)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("GDP, PPP (constant 2017 international $)") +
+  ylab('Number of Papers using Data') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 100000000000, y = 30,label = eq_plot_txt(reg_df, log(data_papers),log(NY.GDP.MKTP.PP.KD))), hjust=0.2, size=4
+  ) +
+  bbc_style() +
+  labs(
+    title='GDP'
+  )
+
+
+p2 <- ggplot(reg_df, aes(y=data_papers, x=SP.POP.TOTL)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("Population, Total") +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 50000000, y = 30,label = eq_plot_txt(reg_df, log(data_papers),log(SP.POP.TOTL))), hjust=0.2, size=4
+  ) +
+  bbc_style() +
+  labs(title="Population") +
+  theme(
+    axis.title.y = element_blank()
+  )
+
+p3 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.OVRL)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  #scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("SPI Overall Score") +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 40, y = 20,label = eq_plot_txt(reg_df, log(data_papers),IQ.SPI.OVRL)), hjust=0.2, size=4
+  ) +
+  bbc_style() +
+  labs(title="SPI Overall Score") +
+  theme(
+    axis.title.y = element_blank()
+  )
+
+
+p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  #scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("SPI Overall Score") +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 40, y = 20,label = eq_plot_txt(reg_df, log(data_papers),IQ.SPI.PIL4)), hjust=0.2, size=4
+  ) +
+  bbc_style() +
+  labs(title="SPI Overall Score") +
+  theme(
+    axis.title.y = element_blank()
+  )
+
+(p1 / p2 / p3) +
+  plot_annotation(
+    #title='Plot of SPI overall score on Poverty Ratio and Gini Index',
+    caption='Source: All indicators come from the World Bank. NY.GDP.MKTP.PP.KD, SP.POP.TOTL & IQ.SPI.OVRL.'
+    ) +
+  theme(
+    axis.title = ggplot2::element_text(size=10),
+    title = ggplot2::element_text(size=10)
+  )
+```
+
+Table. Relationships between Number of Papers Using Data and Statistical Performance Scores
+```{r}
+
+reg_df_fixedn <- reg_df %>%
+  filter(!(is.na(NY.GDP.MKTP.PP.KD) | is.na(SP.POP.TOTL) | is.na(IQ.SPI.OVRL)))
+
+models <- list(
+  'GDP'=lm_robust(log(data_papers) ~ log(NY.GDP.MKTP.PP.KD), data=reg_df_fixedn) ,
+  'Population'=lm_robust(log(data_papers) ~ log(SP.POP.TOTL), data=reg_df_fixedn) ,  
+  'GDP + Population'=lm_robust(log(data_papers) ~ log(NY.GDP.MKTP.PP.KD) + log(SP.POP.TOTL), data=reg_df_fixedn) ,  
+  'SPI'=lm_robust(log(data_papers) ~ IQ.SPI.OVRL, data=reg_df_fixedn) ,  
+  'SPI + Population + GDP'=lm_robust(log(data_papers) ~ IQ.SPI.OVRL + log(NY.GDP.MKTP.PP.KD) + log(SP.POP.TOTL), data=reg_df_fixedn)
+)
+
+modelsummary(models,
+             estimate= "{estimate}{stars}",
+             coef_rename = c("IQ.SPI.OVRL" = "SPI Overall Score",
+                             "IQ.SPI.PIL1" = "SPI Data Use Score",
+                             "IQ.SPI.PIL2" = "SPI Data Services Score",
+                             "IQ.SPI.PIL3" = "SPI Data Products Score",
+                             "IQ.SPI.PIL4" = "SPI Data Sources Score",
+                             "IQ.SPI.PIL5" = "SPI Data Infrastructure Score",
+                             "log(NY.GDP.MKTP.PP.KD)" = "Log GDP",
+                             "log(NY.GDP.PCAP.PP.CD^2)" = "Log GDP",
+                             "region"="Region",
+                             "log(SP.POP.TOTL)"="Log Population",
+                             "log(poverty_surveys)" = 'Log # of Poverty Surveys',
+                             "SG.LAW.INDX" = "Women Business and the Law Index Score (scale 1-100)",
+                             "gii"="Gender Inequality Index",
+                             "sigi"="Social Institutions and Gender Index"
+                             ),
+             notes="",
+             gof_map = gm,
+             escape = FALSE,
+             fmt = 2
+             )
+```
+
+
+<!-- Figure. Comparison between number of articles published about a country and the number of articles about a country *using data*.   -->
+
+```{r eval=FALSE, include=FALSE}
+#cor(reg_df$data_papers, reg_df$papers)
+
+ggplot(country_scores_aggregate_df, aes(y=data_papers, x=papers, label=iso3c)) +
+  geom_point() +
+  geom_text_repel() +
+  xlab('Number of Papers') +
+  scale_x_continuous(label=scales::comma) +
+  ylab('Number of Papers using Data') +
+  scale_y_continuous(label=scales::comma) +  
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 3000, y = 300,label = eq_plot_txt_precise(country_scores_aggregate_df, data_papers,papers)), hjust=0.2, size=4
+  ) +  
+  bbc_style()
+```
+
+
+
+
+Below we show the countries that over or underperform GDP, PPP in 2019.
+
+```{r}
+
+
+
+
+gdp_df_2019 <- country_scores_annual_df %>%
+  filter(date==2019)
+
+mod <- lm(data_papers~ log(NY.GDP.MKTP.PP.KD) , data=gdp_df_2019) 
+summary(mod)
+
+indicator <- 'data_papers'
+
+form <- paste(indicator, " ~ log(NY.GDP.MKTP.PP.KD)", sep="")
+
+
+gdp_overperformers_df <- gdp_df_2019 %>%
+  modelr::add_residuals(mod) %>%
+  arrange(-resid) %>%
+  head(15)
+
+gdp_underperformers_df <- gdp_df_2019 %>%
+  modelr::add_residuals(mod) %>%
+  arrange(resid) %>%
+  head(15)
+
+
+gdp_overperformers_plot <-  gdp_overperformers_df %>%
+  bind_rows(gdp_underperformers_df) %>%
+  arrange(resid) 
+
+gdp_overperformers_plot <- gdp_overperformers_plot %>%
+  mutate(country=factor(country, levels=unique(gdp_overperformers_plot$country)),
+         group=if_else(resid>=0, 'above','below')) %>%
+  ggplot(aes(x=country, y=resid, color=group)) +
+  geom_segment( aes(x=country ,xend=country, y=0, yend=resid), color="black") +
+  geom_point(size=3) +
+  scale_color_manual(name="GDP",
+                     labels = c("Over-performers", "Under-performers"),
+                     values = c('above'="#1A9850", 'below'="#D73027")) +
+  coord_flip() +
+  bbc_style() +
+  theme(
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = 'bottom'
+  ) +
+  xlab("") +
+  ylab("Data Use Articles (deviation)") +
+  ggtitle("Over/Under Perfomers - GDP",
+          subtitle='GDP, PPP (constant 2017 international $)')
+
+gdp_overperformers_plot
+
+```
+
+
+## Comparison to Das et al. (2013) and Porteous (2022)
+
+
+Figure. Comparison to Number of Academic Articles in Das, Do, Shaines, and Srikant (2013)
+
+```{r}
+das_porteous_compare_df <- read_csv(paste0(raw_data, "/das_porteous_compare.csv")) %>%
+  rename(country=`Country name`,
+         das_papers=`Das Total number of publications (1985–2005)`,
+         porteous_papers=`Porteous All Journals`) %>%
+  left_join(country_scores_aggregate_df)
+
+#plot das et al papers against our measrue
+#cor(das_porteous_compare_df$das_papers, das_porteous_compare_df$papers_estimate, use='pairwise.complete.obs')
+
+ggplot(das_porteous_compare_df, aes(y=papers_estimate, x=das_papers)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("Number of Papers according to Das, Do, Shaines, and Srikant (2013)") +
+  ylab('Number of Papers using Data (2000-2020)') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 100, y = 100,label = eq_plot_txt(das_porteous_compare_df, papers_estimate, das_papers), hjust=0.2)
+  ) +
+  bbc_style()
+
+#plot porteous papers against our measrue
+#cor(das_porteous_compare_df$porteous_papers, das_porteous_compare_df$papers_estimate, use='pairwise.complete.obs')
+
+```
+
+Figure. Comparison to Number of Academic Articles in Porteous (2022)
+```{r}
+
+ggplot((das_porteous_compare_df ), aes(y=papers_estimate, x=porteous_papers)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("Number of Papers according to Porteous (2022)") +
+  ylab('Number of Papers using Data (2000-2020)') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 100, y = 100,label = eq_plot_txt(das_porteous_compare_df, papers_estimate, porteous_papers), hjust=0.2)
+  ) +
+  bbc_style()
+```
+
+
+
+## Country Rankings
+
+The S2ORC database contains papers released up to April 14, 2020.  Because the year 2020 is only partially captured, annual country scores on academic data use will be released up until 2019.  Future data collection will take place to incorporate papers after April 2020.
+
+Three measures of data use by academia will be constructed as follows. These measures will be produced for countries on an annual basis, and a time series will be created based on the year of the publication of the article dating back to year 2002, which is the start of the s2orc dataset time series. Each of the three measures provides slightly different information about a country's academic data use.
+
+The first use of data measure is a per capita measure, $UoD_i$, where for each country i, $N_i$  is the population size of the country and $D_i$  is the number of articles making use of data.  
+
+$UoD_i=  D_i  /N_i$
+
+A second measure will be considered including a regression adjusted measure that adjust for other factors in the country such as the population size and GDP This approach responds to the findings in @das2013us, who note in their study of cross-country differences in economic academic output that around 75% of the cross-country variation in economics output is accounted for by population size and income alone. A regression adjusted measure then may be better able to isolate differences in national statistical systems, as opposed to differences between countries in population and income. In this case the use of data measure for country i will be the difference between the actual number of academic articles using data and those predicted based on population and GDP. 
+
+$UoD'_i= D_i-\hat{D}_i$
+
+where
+$\hat{D}_i=\hat{β}_0   +  \hat{β}_1 X_i$
+
+And $β_0$ and $β_1$ are estimated using regression. 
+
+A third measure we will consider is the share of papers on a country that use data. It will be calculated as the ratio of papers that use data to the number of total papers published for the country.  A ratio of 1 indicates that all of the papers published for a country used data, while a ratio of zero indicates none of the papers published for a country use data.
+
+Because of volatility in the number of publications for a country in a particular year, especially for countries with relatively few publications, a 3 year moving average will be taken of the number of publications using data for each country.
+
+
+
+
+
+```{r}
+
+#calculate table with scores by country
+# three measures
+# per capita
+# regression adjusted
+# fraction of papers
+
+# start with per capita
+data_use_df <- country_scores_annual_df %>%
+  mutate(
+    data_use_pcap=10^6*data_papers/SP.POP.TOTL,
+    data_use_pcap_3yr=10^6*data_papers_3yr/SP.POP.TOTL
+  )
+
+  
+# regression adjusted
+mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL) | date , data=country_scores_annual_df) 
+
+data_use_df <- data_use_df %>%
+  modelr::add_residuals(mod, var='data_use_reg_adjusted_3yr') 
+  
+# fraction
+data_use_df <- data_use_df %>%
+  mutate(data_use_ratio=data_papers/papers,
+         data_use_ratio_3yr=data_papers_estimate_3yr/papers_estimate_3yr)
+
+```
+
+The table below is sorted based on the regression adjusted measure of data use.  
+
+Countries shaded in dark orange are the lowest performing, countries in dark green are the highest performing. Countries are grouped into five groups:
+ 
+
+* **Top Quintile**:  Countries in the Top quintile are classified in this group.  Shading in <span style="color:#2ec4b6">dark green</span>.    
+* **4th Quintile**: Countries in the 4th quintile, or those above the 60th percentile but below the 80th percentile are in this group.  Shading in <span style="color:#acece7">light green</span>.    
+* **3rd Quintile**: Countries in the 3rd quintile, or those between the 40th and 60th percentile, are classified in this group.  Shading in <span style="color:#f1dc76">yellow</span>.  
+* **2nd Quintile**: Countries in the 2nd quintile, or those above the 20th percentile but below the 40th percentile, are in this group.  Shading in <span style="color:#ffbf69">light orange</span>.  
+* **Bottom 20%**: Countries in the bottom 20% are classified in this group.  Shading in <span style="color:#ff9f1c">dark orange </span>.  
+
+
+
+Table. Country Scores on Academic Data Use. Year 2019.
+```{r}
+
+#colors
+
+col_palette <- c("#2ec4b6", "#acece7", "#f1dc76",  "#ffbf69","#ff9f1c"   )
+
+col_palette2 <- c("#2ec4b6",  "#f1dc76", "#ff9f1c" )
+
+#make the table
+index_tab <- data_use_df %>%
+  filter(date==2019) %>%
+  select(country, data_use_pcap_3yr,data_use_reg_adjusted_3yr,data_use_ratio_3yr, data_papers ) %>%
+  mutate(across(c('data_use_pcap_3yr','data_use_reg_adjusted_3yr','data_use_ratio_3yr'),round,2)) %>%
+  arrange(desc(data_use_reg_adjusted_3yr))
+
+ #calculate the breaks for the color coding
+        brks <- quantile(index_tab$data_use_pcap_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        brks <- append(min(index_tab$data_use_pcap_3yr, na.rm=T),brks)
+        brks <- append(brks,max(index_tab$data_use_pcap_3yr, na.rm=T))
+
+        brks1 <- quantile(index_tab$data_use_reg_adjusted_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        brks1 <- append(min(index_tab$data_use_reg_adjusted_3yr, na.rm=T),brks1)
+        brks1 <- append(brks1,max(index_tab$data_use_reg_adjusted_3yr, na.rm=T))
+        
+        brks2 <- quantile(index_tab$data_use_ratio_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        brks2 <- append(min(index_tab$data_use_ratio_3yr, na.rm=T),brks2)
+        brks2 <- append(brks2,max(index_tab$data_use_ratio_3yr, na.rm=T))
+        
+
+      #make nice looking
+      index_tab <- index_tab %>%
+        flextable() %>%
+        # add_header_lines('SPI overall score in 2020 and Pillar Scores.') %>%
+        set_header_labels(values=list(
+                             country="Country",
+                             data_use_pcap_3yr="Academic Data Use per capita",
+                             data_use_reg_adjusted_3yr="Academic Data Use Regression Adjusted",
+                             data_use_ratio_3yr="Academic Data Use as Fraction of All Papers",
+                             data_papers = "Total Academic Publications using Data"
+
+                                         )) %>%
+          bg(j = c('data_use_pcap_3yr'),
+             bg = scales::col_bin(col_palette, domain=c(0,100), bins=brks, reverse=TRUE)) %>%
+          bg(j = c('data_use_reg_adjusted_3yr'),
+             bg = scales::col_bin(col_palette, domain=c(0,100), bins=brks1, reverse=TRUE)) %>%
+          bg(j = c('data_use_ratio_3yr'),
+             bg = scales::col_bin(col_palette, domain=c(0,100), bins=brks2, reverse=TRUE)) 
+
+index_tab %>%
+  autofit()
+```
+
+
+
+## Conclusions
+
+
+
+
+
+
+# References
+
+<div id="refs"></div>
+
+# Appendix
+
+## Amazon Mturk Prompt
+
+Amazon MTurk workers were given the following instructions before completing the activity.
+
+    Each of these documents is an academic article. The goal of this study is to measure whether a specific academic article is using data and from which country the data came.
+    
+    There are two classification tasks in this exercise:
+    (1) identifying whether an academic article is using data from a country
+    (2) identifying from which country that data came.
+    
+    For task 1, we are looking specifically at the use of data. Data is any information that has been collected, observed, generated or created to produce research findings. As an example, a study that reports findings or analysis using a survey data, uses data. Some clues to indicate that a study does use data includes whether a survey or census is described, a statistical model estimated, or a table or means or summary statistics is reported.
+    
+    After an article is classified as using data, please note the type of data used. The options are population or business census, survey data, administrative data, geospatial data, private sector data, and other data. If no data is used, then mark "Not applicable". In cases where multiple data types are used, please hold the cntl key and click multiple options.
+    
+    For task 2, we are looking at the country or countries that are studied in the article. In some cases, no country may be applicable. For instance, if the research is theoretical and has no specific country application. In some cases, the research article may involve multiple countries. In these cases, please hold down the cntl key and select all countries that are discussed in the paper.
+    
+    We expect between 10 and 35 percent of all articles to use data.
+    
+Below is an image of an example article for classification.
+
+![](mturk_prompt.png)
+    
+    
+    
+
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+
+excluded_fields <- c('Biology','Chemistry', 'Engineering', 'Physics','Materials Science', 'Geology', 'Art')
+
+mturk_double_code_df2 <- mturk_double_code_df %>%
+  mutate(
+    group_name=case_when( #specify  for each field type. 
+      grepl('Economics', mag_field_of_study)  ~ 'Economics',
+      grepl('Political Science', mag_field_of_study)  ~ 'Political Science',
+      grepl('Business', mag_field_of_study)  ~ 'Business',
+      grepl('Sociology'	, mag_field_of_study)  ~ 'Sociology',
+      grepl('Medicine', mag_field_of_study) ~ 'Medicine',
+      grepl('Computer Science', mag_field_of_study)  ~ 'Computer Science',
+      grepl('Math'	, mag_field_of_study)  ~ 'Math',
+      grepl('Psychology', mag_field_of_study)	 ~ 'Psychology',
+      grepl('Geography'	, mag_field_of_study)  ~ 'Geography',
+      grepl('History'	, mag_field_of_study)  ~ 'History',
+      grepl('Philosophy'	, mag_field_of_study)  ~ 'Philosophy',
+      grepl('Biology', mag_field_of_study) ~ 'Biology', #excluded
+      grepl('Chemistry', mag_field_of_study)  ~ 'Chemistry', #excluded
+      grepl('Engineering', mag_field_of_study)  ~ 'Engineering', #excluded	
+      grepl('Physics', mag_field_of_study)	 ~ 'Physics', #excluded
+      grepl('Material Science', mag_field_of_study)  ~ 'Material Science', #excluded
+      grepl('Geology'	, mag_field_of_study)  ~ 'Geology', #excluded
+      grepl('Environmental Science'	, mag_field_of_study) ~ 'Environmental Science', #excluded
+      grepl('Art'	, mag_field_of_study)  ~ 'Art', #excluded
+      TRUE ~ 'Other'),
+    
+    sample_share=case_when( #specify the fraction of the sample for each field type.  Oversample development fields
+      group_name=='Medicine' ~ .15,
+      group_name=='Biology' ~ 0, #excluded
+      group_name=='Chemistry'  ~ 0, #excluded
+      group_name=='Engineering'  ~ 0, #excluded	
+      group_name=='Computer Science'  ~ 0, #excluded
+      group_name=='Physics'	 ~ 0, #excluded
+      group_name=='Material Science'  ~ 0, #excluded
+      group_name=='Math'	  ~ 0, #excluded
+      group_name=='Psychology'	 ~ .15,
+      group_name=='Economics'  ~ .25,
+      group_name=='Political Science'  ~ .25,
+      group_name=='Business'  ~ .10,
+      group_name=='Geology'	  ~ 0, #excluded
+      group_name=='Sociology'	  ~ .10,
+      group_name=='Geography'	  ~ 0, #excluded
+      group_name=='Environmental Science'	 ~ 0, #excluded
+      group_name=='Art'	  ~ 0, #excluded
+      group_name=='History'	  ~ 0, #excluded
+      group_name=='Philosophy'	  ~ .0, #excluded
+      TRUE ~ 0)
+    )  %>%
+  filter(sample_share>0)  #remove excluded fields
+
+#get list of double coded articles
+mturk_dbl_article_list <- mturk_double_code_df2$title
+
+#get list of reference words for regular expressions
+reference_word_list_4 = "data|survey|census|panel|cross.*?section|Multinomial|Logit|Estimator|Cohort.*?level|Nonlinear|Covariance|Variance|Residual|Sampling|Sample|Instrumental Variable|Kernel|Probit|Poisson|Panel|Quantile|Arellano.*?bond|Confounding|Non.*?random|Randomisation|Statistical Significance|Statistically Significant|Statistical Power|Autoregressive|Fixed.*?Effects|First.*?differences|Central Limit|Stochastic|Autocorrelation|Upward Bias|Downward Bias|Difference.*?in.*?Difference|Bayes|Endogenous|Misspecification|Imputation|Semiparametric|Mean|Mode|Median|Confidence Interval|P.*?value|Heteroskedastic|Time series|Parameter|Granger|Multivariate|Cluster|Chi.*?square|Dummy|Deviation|Coefficient|Likelihood|Conditional|Ceteris.*?paribus|Regression|Data|Cross.*?section|Heckman|Heterogeneity|Residual|Hot deck|Cold deck|standard error|standard deviation|Longitudinal|Counterfactual|Propensity|Exogenous|Microdata|Regressor|Multicollinearity|Attrition|Odds ratio|Polynomial|Propensity|score|Quasi.*?experiment|Treatment group|Control group|BLUE|OLS|metric|indicator|outcome measure|random forest|lasso|ridge|test error|out.*?of.*?sample|neural net"
+
+
+#get data with first coder
+mturk_first_coded_df <- mturk_articles_df %>%
+  filter(title %in% mturk_dbl_article_list) %>%
+  select(paper_id, title, abstract, Answers.country, mag_field_of_study,doi, venue, journal, Answers.data_type, Answers.data_use, WorkerId, WorkTimeInSeconds ) %>%
+  rename(First.country=Answers.country,
+         First.data_type=Answers.data_type,
+         First.data_use=Answers.data_use,
+         First.WorkerId=WorkerId,
+         First.WorkTimeInSeconds=WorkTimeInSeconds)
+
+#worker exclude list.
+#exclude workers with more than 3 matches and with less than 33% match rate
+workers <- c('A1IFIK8J49WBER', 'A299J4PKHAEU9H','A1IHI23KH87K5W','A3HNEYFOIJWPH1',
+             'A2KLJKDG90K1PP','AV22FQTJNBUZT','A2YYQJ3JWA2KGD')
+
+#shape data for second coder
+mturk_second_coded_df <- mturk_double_code_df2 %>%
+  select(paper_id, title, abstract, Answers.country, mag_field_of_study,doi, venue, journal, Answers.data_type, Answers.data_use, WorkerId, WorkTimeInSeconds) %>%
+  rename(Second.country=Answers.country,
+         Second.data_type=Answers.data_type,
+         Second.data_use=Answers.data_use,
+         Second.WorkerId=WorkerId,
+         Second.WorkTimeInSeconds=WorkTimeInSeconds)
+
+mturk_irr_df <- mturk_first_coded_df %>%
+  left_join(mturk_second_coded_df) %>%
+  # filter(!(First.WorkerId %in% workers)) %>% #explore removing low performing workers
+  # filter(!(Second.WorkerId %in% workers)) %>%
+  mutate(data_use_match=First.data_use==Second.data_use,
+         country_match=First.country==Second.country,
+         data_use_naive=First.data_use=="Yes",
+         data_use_regrex=if_else(grepl(reference_word_list_4, abstract),"Yes","No"),
+         data_use_match_regex=Second.data_use==data_use_regrex) %>%
+  select(paper_id, title, abstract, data_use_match,data_use_naive,First.data_use,Second.data_use,First.WorkTimeInSeconds,Second.WorkTimeInSeconds,First.data_type,Second.data_type, country_match, everything() ) %>%
+  filter()
+ 
+# irr_stats <- mturk_irr_df %>%
+#   group_by(First.data_type) %>%
+#   summarise(
+#     data_use_match=mean(data_use_match),
+#     
+#     country_match=mean(country_match),
+#     n=n()
+#   ) %>%
+#   arrange(-n)
+# 
+# regex_stats <- mturk_irr_df %>%
+#   group_by(data_use_naive) %>%
+#   summarise(
+#     data_use_match=mean(data_use_match),
+#     
+#     country_match=mean(country_match),
+#     n=n()
+#   ) %>%
+#   arrange(-n)
+# 
+# #get dataset with regex trues
+# mturk_irr_regex_true_df <- mturk_irr_df %>%
+#   filter(data_use_regrex=='No')
+# 
+# worker_stats1 <- mturk_irr_df %>%
+#   group_by(First.WorkerId) %>%
+#   summarise(
+#     data_use_match=mean(data_use_match),
+#     
+#     country_match=mean(country_match),
+#     n=n()
+#   ) %>%
+#   arrange(-n)
+# 
+# worker_stats2 <- mturk_irr_df %>%
+#   group_by(Second.WorkerId) %>%
+#   summarise(
+#     data_use_match=mean(data_use_match),
+#     
+#     country_match=mean(country_match),
+#     n=n()
+#   ) %>%
+#   arrange(-n)
+# 
+
+duplicates_num <- nrow(mturk_irr_df)
+
+mean(mturk_irr_df$data_use_match)
+mean(mturk_irr_df$data_use_naive)
+mean(mturk_irr_df$data_use_regrex=="Yes")
+mean(mturk_irr_df$First.data_use=="Yes")
+mean(mturk_irr_df$Second.data_use=="Yes")
+
+mean(mturk_irr_df$data_use_match_regex)
+mean(mturk_irr_df$country_match)
+
+#confusion matrix
+#Creating confusion matrix
+confusion_mat <- confusionMatrix(data=factor(mturk_irr_df$First.data_use,levels=c("Yes","No")), reference = factor(mturk_irr_df$Second.data_use,levels=c("Yes","No")))
+ 
+#Display results 
+confusion_mat
+
+# #Creating confusion matrix among regex trues
+# confusion_mat <- confusionMatrix(data=factor(mturk_irr_regex_true_df$First.data_use,levels=c("Yes","No")), reference = factor(mturk_irr_regex_true_df$Second.data_use,levels=c("Yes","No")))
+#  
+# #Display results 
+# confusion_mat
+# 
+# # #now do for regex
+# confusion_mat_regex <- confusionMatrix(data=factor(mturk_irr_df$First.data_use,levels=c("Yes","No")), reference = factor(mturk_irr_df$data_use_regrex,levels=c("Yes","No")))
+# 
+# confusion_mat_regex
+
+
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+#look at how rankings compare between double coded
+mturk_irr_rankings_df1 <- mturk_irr_df %>%
+  filter(First.data_use=="Yes")
+
+mturk_irr_rankings_df2 <- mturk_irr_df %>%
+  filter(Second.data_use=="Yes")
+
+mturk_irr_rankings_df1 <- cbind( sapply(country_scores_df$country, function(x) as.integer(grepl(x, mturk_irr_rankings_df1$First.country))))
+mturk_irr_rankings_df2 <- cbind( sapply(country_scores_df$country, function(x) as.integer(grepl(x, mturk_irr_rankings_df2$Second.country))))
+
+#collapse to country level
+mturk_irr_country_rankings_df1 <- mturk_irr_rankings_df1 %>%
+  as_tibble() %>%
+  select_if(is.numeric) %>%
+  map_dbl(sum) %>%
+  stack() %>%
+  rename(
+    country=ind,
+    first.count=values
+  )
+
+mturk_irr_country_rankings_df2 <- mturk_irr_rankings_df2 %>%
+  as_tibble() %>%
+  select_if(is.numeric) %>%
+  map_dbl(sum) %>%
+  stack() %>%
+  rename(
+    country=ind,
+    second.count=values
+  )
+
+mturk_country_rankings <- mturk_irr_country_rankings_df1 %>%
+  left_join(mturk_irr_country_rankings_df2) %>%
+  filter(first.count+second.count>0)
+
+cor(mturk_country_rankings$first.count, mturk_country_rankings$second.count)
+
+ggplot(mturk_country_rankings, aes(x=first.count, y=second.count)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 1, y = 6,label = eq_plot_txt(mturk_country_rankings, second.count, first.count), hjust=0.2)
+  ) +
+  geom_text_repel(aes(label=country)) +
+  bbc_style()
+
+
+
+# One concern may be that the Amazon Mechanical Turk workers were unreliable and gave inaccurate answers.  As a test of this, the team double coded
+# `r duplicates_num` articles by Mechanical Turk workers. Using this data, inter-rater reliability can be assessed.
+# 
+# Reliability is around 78% agreement for countries and a little under 60% agreement for whether the article uses data.  This indicates that classifying whether an article uses data is challenging even for human raters. 
+
+```
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#bar chart race
+library(gganimate)
+
+anim <- country_scores_annual_df %>%
+  group_by(year) %>%
+  mutate(rank=rank(-data_papers_estimate)) %>%
+  arrange(desc(data_papers_estimate)) %>%
+  filter(row_number()<=10) %>%
+ggplot( aes(x=rank,group=country, fill=region)) +
+  geom_col(aes(y=data_papers_estimate,
+            height=data_papers_estimate)) +
+  geom_text(aes(y = 0, label = paste(country, " ")), vjust = 0.2, hjust = 1) +
+  geom_text(aes(y=data_papers_estimate,label = scales::comma(round(data_papers_estimate,0)), hjust=0)) +  
+  coord_flip(clip = "off", expand = FALSE) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_reverse() +
+  guides(color = FALSE, fill = FALSE) +
+  theme(axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+         axis.title.y=element_blank(),
+        legend.position="none",
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.grid.major.x = element_line( size=.1, color="grey" ),
+        panel.grid.minor.x = element_line( size=.1, color="grey" ),
+        plot.title=element_text(size=25, hjust=0.5, face="bold", colour="grey", vjust=-1),
+        plot.subtitle=element_text(size=18, hjust=0.5, face="italic", color="grey"),
+        plot.caption =element_text(size=8, hjust=0.5, face="italic", color="grey"),
+        plot.background=element_blank(),
+       plot.margin = margin(2,2, 2, 4, "cm")) + 
+  labs(title = 'Academic Articles : {closest_state}',
+       subtitle  =  "Top 10 Countries",
+       caption  = "Academic Article | Data Source: World Bank Data") +
+  transition_states(year,
+                    transition_length = 3,
+                    state_length = 1) +
+  ease_aes(y = 'cubic-in-out')
+
+
+animate(
+  anim + enter_fade() + exit_fly(y_loc = 1),
+  renderer = gifski_renderer()
+)
+```
+
+
+
+
+<!-- ## Comparison of Articles Published and Number of Poverty Surveys -->
+
+<!-- The figure below shows the relationship between the number of poverty surveys fielded in a county and the number of academic publications.  The number of poverty surveys in each country comes from the World Bank's Poverty and Inequality Platform (PIP) and includes all nationally representative surveys from 2001 to 2020, the same span of years as the count of academic articles.  Regression estimates indicate an elasticity of 0.7 between the number of poverty surveys and academic articles using data, that is a 1% increase in the number of poverty surveys increases the number of academic articles by 0.7%.  -->
+
+<!-- Figure. Relationship Between Articles and Number of Poverty Surveys -->
+<!-- ```{r householdsurveys} -->
+<!-- #access household surveys in PIP (povcalnet) -->
+<!-- url <- "https://api.worldbank.org/pip/v1/survey-metadata" -->
+<!-- pip_df <- fromJSON(url, -->
+<!--                         simplifyDataFrame = TRUE -->
+<!--                          ) %>% -->
+<!--   filter(survey_coverage=="national") %>% -->
+<!--   rename(indicator_date=reporting_year, -->
+<!--          iso3c=country_code) %>%  -->
+<!--   filter(between(indicator_date,2001,2020))  -->
+
+<!-- pip_df <- pip_df %>% -->
+<!--   left_join(country_metadata) %>% -->
+<!--   group_by(iso3c) %>% -->
+<!--   summarise(poverty_surveys=n())  -->
+
+<!-- pip_df <- reg_df %>% -->
+<!--   left_join(pip_df) -->
+
+
+
+<!-- pip_df  %>% -->
+<!--   ggplot( aes(y=data_papers, x=poverty_surveys)) + -->
+<!--     geom_point() + -->
+<!--     geom_text_repel(aes(label=iso3c)) + -->
+<!--     scale_x_log10(labels=scales::comma) + -->
+<!--     scale_y_log10(labels=scales::comma) + -->
+<!--     xlab("Number of Poverty Surveys ") + -->
+<!--     ylab('Number of Papers using Data') + -->
+<!--     geom_smooth(method = "lm") + -->
+<!--       geom_richtext( -->
+<!--     aes(x = 10, y = 20,label = eq_plot_txt(pip_df, log(data_papers),log(poverty_surveys))), hjust=0.2, size=4 -->
+<!--     ) + -->
+<!--     bbc_style() + -->
+<!--     labs(      subtitle="Data from 2001-2020" -->
+<!--     ) -->
+
+
+
+
+<!-- ``` -->
