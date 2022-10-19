@@ -1,12 +1,10 @@
 ---
-title: "Measuring the Use of Data in Academia"
-author: Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, Brian Stacy, and Xiaoyu
-  Wang
+title: "Where are the Data Deserts? Measuring the Use of Data by Academia Across Countries using Natural Language Processing"
+author: Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, Brian Stacy, and Xiaoyu Wang
 date: "`r Sys.Date()`"
 output:
-  word_document: default
-  html_document:
-    df_print: paged
+  word_document: 
+    number_sections: true
 abstract: "A concentration of high-quality academic research can shed light on well-being
   within a country, shape public policy, and monitor progress on goals. A key ingredient
   to having an abundance of high-quality research in a country is timely, high quality,
@@ -18,7 +16,7 @@ abstract: "A concentration of high-quality academic research can shed light on w
   mining) is applied to open-access research papers, from which a measure of data
   use by academia is produced for each country. Compared to a set of aroun 3,500 human 
   coded academic articles, the natural language processing approach produces country 
-  rankings that have a correlation of over 0.96 with the human coded approach.  After 
+  rankings that have a correlation of over 0.99 with the human coded approach.  After 
   classifying more than 1 million academic articles, measures of the number of articles 
   using data have a strong correlation between GDP, Population, and the Statistical Performance 
   Indicator (SPI) overall score. Around 50% of all papers using data from 2000-2020 were produced 
@@ -70,31 +68,15 @@ maj_col <- "#023047"
 min_col <- "#8ecae6"
 ```
 
-```{r data, include=FALSE}
-
-#read in world bank country metadata
-country_metadata <- wb_countries() %>%
-  filter(region!="Aggregates")
-
-
-
-#read in country scores based on collapsing articles in mturk
-#This file was produced in the classifications_compare.ipynb in the 02_programs/misc file.
-country_score_mturk_df <- read_csv(paste0(output, "mturk_country_scores.csv")) %>%
-  rename(iso3c=index) %>%
-  left_join(country_metadata) 
-
-
-
-
-gc()
-
-```
 
 
 
 
 ```{r countryscore, include=FALSE}
+#read in world bank country metadata
+country_metadata <- wb_countries() %>%
+  filter(region!="Aggregates")
+
 #articles_year_df <- fread(paste0(s3_output, "results_completed_updated.csv")) 
 
 #read in data from AWS
@@ -112,11 +94,14 @@ tictoc::toc()
 correlates_df <- wbstats::wb_data(
   indicator=c("SP.POP.TOTL","NY.GDP.MKTP.PP.KD",'IQ.SPI.OVRL','NY.GDP.PCAP.PP.KD',
               'IQ.SPI.PIL1','IQ.SPI.PIL2','IQ.SPI.PIL3',
-              'IQ.SPI.PIL4','IQ.SPI.PIL5'),
+              'IQ.SPI.PIL4','IQ.SPI.PIL5',
+              'IQ.SCI.OVRL'),
   country = 'countries_only',
   start_date=2000,
   end_date=2020
-)
+) %>%
+  left_join(read_csv(paste0(raw_data, "/SPI_Index.csv"))) 
+  
 
 countries_list <- colnames(articles_year_df[,12:262])
 #get number of articles by country
@@ -155,8 +140,57 @@ articles_data_use_year_df <- articles_data_use_year_df %>%
          data_papers_3yr=rollmean(data_papers, k=3, align='left', fill=NA))
 
 
+#drop medical articles
+#get number of articles using data by country
+articles_data_use_year_restrict_df <- articles_year_df[data_use=="Yes" & group_name!='Medicine',lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
+
+articles_data_use_year_restrict_df <- articles_data_use_year_restrict_df %>% 
+  as_tibble() %>%
+  pivot_longer(
+    cols=countries_list,
+    names_to = 'iso3c',
+    values_to='data_papers_nomed'
+  ) %>%
+  left_join(country_metadata) %>%
+  filter(!is.na(country)) %>%
+  group_by(iso3c) %>%
+  arrange(desc(year)) %>%  
+  mutate(data_papers_nomed_estimate=data_papers_nomed/article_share,
+         data_papers_nomed_estimate_3yr=rollmean(data_papers_nomed_estimate, k=3, align='left', fill=NA),
+         data_papers_nomed_3yr=rollmean(data_papers_nomed, k=3, align='left', fill=NA))
+
+
+#get number of articles using data by country and subject
+articles_data_use_year_subject_df <- articles_year_df[data_use=="Yes",lapply(.SD, sum, na.rm=TRUE), by=c('year','group_name'), .SDcols=countries_list]
+
+articles_data_use_year_subject_df <- articles_data_use_year_subject_df %>% 
+  as_tibble() %>%
+  pivot_longer(
+    cols=countries_list,
+    names_to = 'iso3c',
+    values_to='data_papers'
+  ) %>%
+  group_by(iso3c, group_name) %>%
+  arrange(desc(year)) %>%
+  mutate(
+    data_papers_3yr=rollmean(data_papers, k=3, align='left', fill=NA)
+  ) %>%
+  left_join(country_metadata) %>%
+  filter(!is.na(country)) %>%
+  group_by(iso3c) %>%
+  arrange(desc(year)) %>%
+  pivot_wider(
+    names_from=group_name,
+    values_from=c('data_papers','data_papers_3yr'),
+    names_glue="{.value}_{group_name}"
+  )
+
+
+
 country_scores_annual_df <- articles_year_country_df %>%
   left_join(articles_data_use_year_df)  %>%
+  left_join(articles_data_use_year_restrict_df) %>%
+  left_join(articles_data_use_year_subject_df) %>%
   filter(!is.na(country)) %>%
   rename(date=year) %>%
   left_join(correlates_df) 
@@ -171,8 +205,16 @@ country_scores_aggregate_df <- country_scores_annual_df %>%
   summarise(papers=sum(papers, na.rm=T),
             papers_estimate=sum(papers_estimate, na.rm=T),
             data_papers=sum(data_papers, na.rm=T),
-            data_papers_estimate=sum(data_papers_estimate, na.rm=T)) %>%
-  mutate(date=2019) %>%
+            data_papers_estimate=sum(data_papers_estimate, na.rm=T),
+            data_papers_nomed=sum(data_papers_nomed, na.rm=T),
+            data_papers_nomed_estimate=sum(data_papers_nomed_estimate, na.rm=T),
+            data_papers_Medicine=sum(data_papers_Medicine, na.rm=T),
+            data_papers_Business=sum(data_papers_Business, na.rm=T),
+            data_papers_Economics=sum(data_papers_Economics, na.rm=T),
+            data_papers_Psychology=sum(data_papers_Psychology, na.rm=T),
+            data_papers_Sociology =sum(data_papers_Sociology, na.rm=T), 
+            data_papers_Political_Science=sum(`data_papers_Political Science`, na.rm=T),) %>%
+  mutate(date=2020) %>%
   left_join(correlates_df) %>%
   ungroup() %>%
   mutate(data_papers_pcap=1000000*data_papers/SP.POP.TOTL)
@@ -186,6 +228,98 @@ not_found <- country_scores_aggregate_df %>%
   filter(region!="Aggregates") %>%
   pull(country)
 ```
+
+```{r mturkdata, include=FALSE}
+
+
+
+
+
+# #read in country scores based on collapsing articles in mturk
+# #This file was produced in the classifications_compare.ipynb in the 02_programs/misc file.
+# country_score_mturk_df <- read_csv(paste0(output, "mturk_country_scores.csv")) %>%
+#   rename(iso3c=index) %>%
+#   left_join(country_metadata) 
+
+#read in articles in the training set
+training_df <- read_csv(paste0(raw_data,"/train_doc_wcounts.csv")) %>%
+  rename(paper_id=id) %>%
+  distinct(paper_id, text, .keep_all=TRUE) %>%
+  as.data.table()
+
+testing_df <- read_csv(paste0(raw_data,"/test_doc_wcounts.csv")) %>%
+  rename(paper_id=id) %>%
+  distinct(paper_id, text, .keep_all=TRUE) %>%
+  as.data.table()
+
+
+############
+# read in all mturk articles
+mturk_articles_df <- read_csv(paste0(output,'/mturk_article_classifications.csv')) %>%
+  as.data.table() %>%
+  distinct(paper_id, .keep_all=TRUE) %>%
+  left_join(articles_year_df[,.(paper_id, data_use)] ) %>%
+  left_join(training_df) %>%
+  filter(!is.na(paper_id)) %>%
+  filter(!is.na(data_use)) %>%
+  filter(is.na(data_type)) %>% #drop those in train set of articles
+  as.data.table()
+
+#drop the training set from conmparison
+
+
+
+# mturk_articles_df %>%
+#   group_by(data_use) %>% 
+#   summarise(n=n())
+
+countries_list <- colnames(mturk_articles_df[,19:156])
+#get number of articles by country using mturk classifier
+mturk_year_country_df <- mturk_articles_df[data_use_mturk==1,lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
+
+mturk_year_country_df <- mturk_year_country_df %>% 
+  as_tibble() %>%
+  pivot_longer(
+    cols=countries_list,
+    names_to = 'iso3c',
+    values_to='data_use_mturk_papers'
+  ) %>%
+  left_join(country_metadata) %>%
+  filter(!is.na(country)) %>%
+  group_by(iso3c) %>%
+  arrange(desc(year)) 
+
+
+#get number of articles by country
+class_year_country_df <- mturk_articles_df[data_use=="Yes",lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
+
+class_year_country_df <- class_year_country_df %>% 
+  as_tibble() %>%
+  pivot_longer(
+    cols=countries_list,
+    names_to = 'iso3c',
+    values_to='data_use_class_papers'
+  ) %>%
+  left_join(country_metadata) %>%
+  filter(!is.na(country)) %>%
+  group_by(iso3c) %>%
+  arrange(desc(year)) 
+
+#put in one file
+mturk_articles_year_df <- mturk_year_country_df %>%
+  left_join(class_year_country_df)
+
+
+country_score_mturk_df <- mturk_articles_year_df %>%
+  group_by(country, iso3c, region_iso3c, region, admin_region, income_level, lending_type) %>%
+  summarise(data_use_mturk_papers=sum(data_use_mturk_papers),
+            data_use_class_papers=sum(data_use_class_papers, na.rm=T))
+
+
+gc()
+
+```
+
 
 ```{r programs}
 
@@ -241,7 +375,7 @@ bbc_style <- function() {
     plot.subtitle = ggplot2::element_text(family=font,
                                           size=20,
                                           margin=ggplot2::margin(9,0,9,0)),
-    plot.caption = ggplot2::element_blank(),
+    #plot.caption = ggplot2::element_blank(),
     #This leaves the caption text element empty, because it is set elsewhere in the finalise plot function
     
     #Legend format
@@ -257,7 +391,9 @@ bbc_style <- function() {
     
     #Axis format
     #This sets the text font, size and colour for the axis test, as well as setting the margins and removes lines and ticks. In some cases, axis lines and axis ticks are things we would want to have in the chart - the cookbook shows examples of how to do so.
-    axis.title = ggplot2::element_blank(),
+    axis.title = ggplot2::element_text(family=font,
+                                      size=12,
+                                      color="#222222"),
     axis.text = ggplot2::element_text(family=font,
                                       size=12,
                                       color="#222222"),
@@ -362,11 +498,11 @@ spi_mapper_quintile  <- function(data, indicator, title) {
   
   SPI_map <- map_df %>%
     mutate(spi_groups=case_when(
-      between(n_papers, spi_groups_quantiles[4],max(map_df$n_papers)) ~ "Top Quintile",
+      between(n_papers, spi_groups_quantiles[4],max(map_df$n_papers, na.rm = TRUE)) ~ "Top Quintile",
       between(n_papers, spi_groups_quantiles[3],spi_groups_quantiles[4]) ~ "4th Quintile",
       between(n_papers, spi_groups_quantiles[2],spi_groups_quantiles[3]) ~ "3rd Quintile",
       between(n_papers, spi_groups_quantiles[1],spi_groups_quantiles[2]) ~ "2nd Quintile",
-      between(n_papers, 0,spi_groups_quantiles[1]) ~ "Bottom 20%"
+      between(n_papers, min(map_df$n_papers, na.rm=TRUE),spi_groups_quantiles[1]) ~ "Bottom 20%"
       
     )) %>%
     mutate(spi_groups=factor(spi_groups, 
@@ -390,7 +526,7 @@ spi_mapper_quintile  <- function(data, indicator, title) {
     scale_x_continuous(expand = c(0, 0), limits = standard_crop_wintri()$xlim) +
     scale_y_continuous(expand = c(0, 0), limits = standard_crop_wintri()$ylim) +
     scale_fill_manual(
-      name='Papers per capita',
+      name='Quintile',
       values=col_pal,
       na.value='grey'
     ) +
@@ -399,7 +535,7 @@ spi_mapper_quintile  <- function(data, indicator, title) {
     labs(
       title=str_wrap(title,100),
       caption = 'Source: SPI',
-      fill='Papers per capita'
+      fill='Quintile'
     )
   
 
@@ -454,6 +590,8 @@ raters <- length(unique(mturk_df$WorkerId))
 
 work_time_mn <- median(mturk_df$WorkTimeInSeconds)/60
 
+
+
 ```
 
 # Introduction
@@ -468,12 +606,15 @@ The World Bank recognized the importance of academia as a user of the national s
   
 Advances in Natural Language Processing, based on machine learning, and new data sources have opened up new approaches to measuring academic data use at low costs. Organizations such as Semantic Scholar Open Research Corpus (s2orc) have digitized millions of research papers produced around the world, including in fields other than economics, and opened up APIs for accessing the raw text of these documents (@lo-etal-2020-s2orc). The s2orc dataset also includes data from `r ncontry_database` countries, which is much greater than the 74 countries covered by EconLit.^[The World Development Indicators includes 217 countries.  The country not found with a paper in the WDI is `r not_found`.] Natural Language Processing algorithms have been developed to efficiently parse millions of documents to classify documents. For instance, @hansen2018transparency, published in the Quarterly Journal of Economics, processed 149 transcripts from the Federal Reserve to study how Federal Reserve board members react to transparency in terms of topic coverage. 
 			
-Using these tools, we propose to develop a methodology for measuring data use by academia. These measures will then be used to study the relationship between products produced by the national statistical system and research output, 
+Using these tools, this paper proposes a new methodology for measuring data use by academia. The measures produced are then used to study the relationship between products produced by the national statistical system and research output. 
 
-The project seeks to answer the following questions: 
+After training a natural language processing model on around 900 hand coded articles using Amazon Mturk workers, the model was able to predict whether an article made use of data with 87% accuracy compared to a set of articles held out of the model training.  Once aggregating articles to the country level, the relationship between the number of articles classified by human raters to use data in a specific country and the machine learning model are even higher with a correlation of around 0.99.  Applying this model to more than 1 million academic articles from the s2orc database from 2000-2020, the model predictions on articles using data per country are highly correlated with other estimates from the literature (@das2013us, @porteous2020research, and @white2019publications).
 
-  1.	What is a feasible way to create a metric of data use by academia?    
-  2.	What is the relationship between activities of the national statistical system and academic output?
+Based on the 1 million articles, the number of articles using data for 216 countries are calculated.  Among income groups, high income countries produced nearly 50% of all papers using data from 2000-2020, despite only making up around 17% of the world's population.  Despite making up around 1/3rd of the world population, low income countries only produce around 5% of articles using data.  GDP per capita and population are both strong predictors of academic output.  Combined the two explain around 74% of the cross country variation in academic output.  
+
+A countries SPI overall score is a statistically significant predictor of academic output using data, even conditional on population and GDP per capita.  A particular area related to data use by academia are the data sources available for a country.  For example, the availability of a populaiton census in the past 10 years is associated with a 0.6% increase in academic output using data.  The availability of 2 or more household surveys on income/consumption in the past 10 years for a country is associated with an around 0.5% increase in papers using data. Availability of agriculture surveys and geospatial data at the Admin 1 level are also predictive.
+
+The remainder of the paper clarifies our approach for measuring data use by academia and discusses our data sources.  Section four discusses the model performance of the natural language processing approach.  Section 5 discusses the empirical results.  Section 6 includes the conclusions.
 
 # Empirical Strategy
 
@@ -483,15 +624,12 @@ Before proceeding to a discussion of the NLP techniques a brief discussion will 
 
 First, the country or countries of study in each academic article will be determined by using two approaches based on the information in the title, abstract, or topic fields. The first does regular expression searches based on the presence of ISO3166 country names. For this approach, a defined set of country names are compiled and the presence of these country names is checked within the title, abstract, or topic fields. Advantages of this approach are that it is transparent, widely used in social science research, and extends to other languages easily. A downside of this approach is that there are potential exclusion errors, such as if the country’s spelling is non-standard.
 
-A second approach is based on Named Entity Recognition (NER), which uses machine learning to identify objects from text, using the Python library spaCy. SpaCy has been used by a number of academic studies to classify text, such @kleinberg2018using & @shelar2020named. The Named Entity Recognition algorithm splits text into a set of named entities. To give an example, the text “Apple is looking at buying U.K. startup for `$`1 billion”, can be classified as “Apple [ORG] is looking at buying U.K. [Country] startup for $1 billion [Monetary value]”. For the purposes of this study, NER will be used to identify countries of study in the academic articles. The spaCy python package supports multiple languages and has been trained on multiple spellings of countries and so overcomes some of the limitations of the regular expression approach.
+A second approach is based on Named Entity Recognition (NER), which uses machine learning to identify objects from text, using the Python library spaCy. SpaCy has been used by a number of academic studies to classify text, such @kleinberg2018using & @shelar2020named. The Named Entity Recognition algorithm splits text into a set of named entities. To give an example, the text “Apple is looking at buying U.K. startup for `$`1 billion”, can be classified as “Apple [ORG] is looking at buying U.K. [Country] startup for $1 billion [Monetary value]”. For the purposes of this study, NER will be used to identify countries of study in the academic articles. The spaCy python package supports multiple languages and has been trained on multiple spellings of countries and so overcomes some of the limitations of the regular expression approach.  If a country shows up either through the regular expression search or the search using NER, the country will be linked to that article. 
 
-If a country shows up either through the regular expression search or the search using NER, the country will be linked to that article. Using this approach, it may also be possible to acquire additional information such as the topic of study (i.e. health, education, trade), which could give further breakdowns of academic data use. 
+Second, whether the paper makes use of data will be classified. A supervised machine learning approach is used, where the team creates a precise definition of data use, manually labels 3500 publications randomly selected, and then trains a model on this data. In order convert the raw text of the title and abstract of the paper into a format suitable for the natural language processing model, the BERT (bidirectional Encoder Representations for transformers) model (@bert) is used to encode raw text to a numeric format suitable for predictions.  BERT is pre-trained on a large corpus comprising the Toronto Book Corpus and Wikipedia.  After encoding the raw text, PyTorch (@torch) is then used to produce a model to classify the articles based on the labeled data from human raters using the Mechanical Turk service.  After training the model using BERT and PyTorch, out of sample predictions of whether or not an article uses data are possible using the trained model using the entire corpus of 1 million articles from s2orc.  
 
-Second, whether the paper makes use of data will be classified. Again two approaches will be tried. First, a regular expression search approach to classify papers will be applied again. In this case, the algorithm will check for the presence of key words, such as “data”, “survey”, “census” in the text of articles. Second, supervised machine learning, where the team creates a precise definition of data use, manually labels 3500 publications randomly selected, and then trains a model on this data will also be explored.
 
-While text mining based on Natural Language Processing has been used successfully in other contexts, such as the @hansen2018transparency analysis of Federal Reserve transcripts, it is not guaranteed that the approach will succeed. In order to determine whether the approaches tested in this paper are successful, the team will manually classify 3500 randomly selected publications based on the country of study and whether the article makes use of data in the analysis.   A key research output of this project will be the extent that the classifications of country of study and use of data match those classified manually by the team. 
-
-Assuming the approach to classifying the country of study and use of data are successful, three measures of data use by academia will be constructed as follows. These measures will be produced for countries on an annual basis, and a time series will be created based on the year of the publication of the article dating back to year 2002, which is the start of the s2orc dataset time series. The first use of data measure is a per capita measure, a second measure will be a regression adjusted measure that adjust for other factors in the country such as the population size and GDP, and a third measure we will consider is the share of papers on a country that use data.
+Following the training of the model, measures of data use by academia will be constructed as follows. These measures will be produced for countries on an annual basis, and a time series will be created based on the year of the publication of the article dating back to year 2000. The first use of data measure is a per capita measure, a second measure will be a regression adjusted measure that adjust for other factors in the country such as the population size and GDP per capita, and a third measure we will consider is the share of papers on a country that use data.
 
 
 
@@ -582,16 +720,9 @@ sumstats_tab %>%
 
 
 
-# Machine Learning Approach
-
-Add in Xiaoyu's description.
+# Model Performance
 
 After training and validating the model, the country (or countries) of study and whether the article article uses data are classified for a corpus of `r scales::comma(nrow(articles_year_df))` academic articles.  Using this classified dataset of articles, a new dataset was constructed with the number of articles using data per country.  Countries are organized to match the countries in the World Bank's World Development Indicators.  In total, article counts are available for 218 countries.
-
-# Analysis
-
-## Comparison of Mturk Ratings of Articles to Machine Learning Approach
-
 
 ```{r}
 mturk_cor <- cor(country_score_mturk_df$data_use_class_papers, country_score_mturk_df$data_use_mturk_papers)
@@ -603,11 +734,12 @@ reg_df <- country_scores_aggregate_df %>% filter(data_papers_estimate>0)
 
 ```
 
-In what follows, a comparison is given between the human raters of the articles, who were hired through Amazon Mechanical Turk (MTurk), and the predictions of the country of study and whether the article uses data from the machine learning model.  To do so, a set of 3,500 articles are examined that were hand coded by the MTurk workers.  This set of 3,500 articles is then fed to the machine learning model, from which the country of study and data use status are identified.
+In what follows, a comparison is given between the human raters of the articles, who were hired through Amazon Mechanical Turk (MTurk), and the predictions of the country of study and whether the article uses data from the machine learning model.  To do so, a set of 3,500 articles are examined that were hand coded by the MTurk workers.  From this set of 3,500 articles, 900 are then fed to the machine learning model, from which the country of study and data use status are identified.
 
-Among this set of 3,500 articles, we can see the correlation between the number of articles written about each country using the two approaches and percentage of articles classified as using data.  The Pearson between the human raters and the NLP predictions is `r round(mturk_cor,2)`.  The figure below shows the scatterplot between the human classifications and the NLP classifications.  
+After training a natural language processing model on around 900 hand coded articles using Amazon Mturk workers, the model was able to predict whether an article made use of data with 87% accuracy compared to a set of articles held out of the model training.
 
-While there is strong agreement between the two approaches, there are some notable differences.  First, some countries are notably over-represented among human classifiers compared to those produced using the machine learning model. One is North Korea, which was selected by human raters nine times, while the NLP model selected only 1 paper as related to North Korea.  Upon inspecting the nine articles identified by the Amazon MTurk classifiers, it appears that these articles were misclassified and were actually referring to South Korea.  Additionally, the United Kingdom and United States are notable outliers.  It is possible other contextual information in the title or abstract of the article, such as mention of a specific policy related to the country, led the human classifiers to classify more articles than could be identified using the regular expressions search for country names and the named entity recognition tools.
+Among a holdout set of around 2,600 articles, which are not used in the model training, we can see the correlation between the number of articles written about each country using the two approaches and percentage of articles classified as using data in the figure below.  The Pearson between the human raters and the NLP predictions is `r round(mturk_cor,3)`.  The figure below shows the scatterplot between the human classifications and the NLP classifications.  
+
 
 
 Figure. Comparison of Human Classifications of Data Use to NLP Predictions
@@ -617,9 +749,9 @@ p1 <- ggplot(country_score_mturk_df, aes(x=data_use_class_papers, y=data_use_mtu
   geom_point() +
   geom_smooth(method = "lm") +
   geom_richtext(
-    aes(x = 2, y = 1000,label = eq_plot_txt(country_score_mturk_df, data_use_mturk_papers, data_use_class_papers), hjust=0.2)
+    aes(x = 2, y = 100,label = eq_plot_txt_precise(country_score_mturk_df, data_use_mturk_papers, data_use_class_papers), hjust=0.2)
   ) +
-  scale_x_log10(labels=scales::comma) +
+ scale_x_log10(labels=scales::comma) +
   scale_y_log10(labels=scales::comma) +
   geom_text_repel(aes(label=country)) +
   ylab("Mturk Classification") +
@@ -627,9 +759,96 @@ p1 <- ggplot(country_score_mturk_df, aes(x=data_use_class_papers, y=data_use_mtu
   bbc_style()
 
 p1
+
+#lm(data_use_mturk_papers ~ data_use_class_papers, data=country_score_mturk_df) %>% summary()
+
 ```
 
+## Comparison to Previous Literature
 
+After applying the natural language processing model to around 1 million articles from the s2orc corpus, the estimated number of articles produced using data per country are then compared to previous estimates in the literature.  
+
+@das2013us use a corpus of more than 76 thousand empirical economics papers published between 1985 and 2005 to rank the academic output of countries using the EconLit database.  While the estimates from our approach using the s2orc database do not exactly overlap, because of differences in the years covered and the subjects included (@das2013us consider only economics papers, while this study includes papers additionally from medicine, political science, sociology, and psychology), the correlation between country output is still 0.62.  Estimates from @das2013us are taken from Table A3 of their paper.
+
+Figure. Comparison to Number of Academic Articles in @das2013us
+
+```{r}
+das_porteous_compare_df <- read_csv(paste0(raw_data, "/das_porteous_compare.csv")) %>%
+  rename(country=`Country name`,
+         das_papers=`Das Total number of publications (1985–2005)`,
+         porteous_papers=`Porteous All Journals`) %>%
+  left_join(country_scores_aggregate_df)
+
+#plot das et al papers against our measrue
+#cor(das_porteous_compare_df$das_papers, das_porteous_compare_df$data_papers_estimate, use='pairwise.complete.obs')
+
+ggplot(das_porteous_compare_df, aes(y=data_papers_estimate, x=das_papers)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("Number of Papers according to Das, Do, Shaines, and Srikant (2013)") +
+  ylab('Number of Papers using Data (2000-2020)') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 100, y = 100,label = eq_plot_txt(das_porteous_compare_df, data_papers_estimate, das_papers), hjust=0.2)
+  ) +
+  bbc_style()
+
+
+
+```
+
+Additionally, @porteous2020research examines the production of economics journal articles from 54 African countries between 2000 and 2019 using the EconLit database.  The correlation between country rankings using the approach in this paper and that of @porteous2020research is 0.87.  Estimates from @porteous2020research are taken from Table 3 in that paper and include all journal publications from 2000 to 2019 (column 2 of Table 3).
+
+Figure. Comparison to Number of Academic Articles in @porteous2020research
+```{r}
+#plot porteous papers against our measrue
+#cor(das_porteous_compare_df$porteous_papers, das_porteous_compare_df$data_papers_estimate, use='pairwise.complete.obs')
+
+
+ggplot((das_porteous_compare_df ), aes(y=data_papers_estimate, x=porteous_papers)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("Number of Papers according to Porteous (2022)") +
+  ylab('Number of Papers using Data (2000-2020)') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 100, y = 100,label = eq_plot_txt(das_porteous_compare_df, data_papers_estimate, porteous_papers), hjust=0.2)
+  ) +
+  bbc_style()
+```
+
+A third comparison is to the number of scientific and technical journal articles produced by the National Science Foundation (@white2019publications).  The number of scientific and engineering articles published in the following fields: physics, biology, chemistry, mathematics, clinical medicine, biomedical research, engineering and technology, and earth and space sciences. The NSF considers article counts from a set of journals covered by Science Citation Index (SCI) and Social Sciences Citation Index (SSCI).  Data are accessed from the WDI (indicator IP.JRN.ARTC.SC).
+
+Data from the NSF are papers produced in the year 2018.  Likewise, estimates from this paper's NLP model are for the year 2018 only.  The correlation between the two estimates are around 0.9.
+
+Figure. Comparison to Number of Academic Articles in NSF database of scientific and technical articles.  2018.
+```{r natacad}
+
+#pull data on scientific and technical journal articles produced based on Source: National Science Foundation, Science and Engineering Indicators.
+nsf_compare <- wbstats::wb_data(indicator='IP.JRN.ARTC.SC',
+                                start_date = 2018, end_date = 2018) %>%
+  left_join(country_scores_annual_df)
+
+#plot porteous papers against our measrue
+#cor(nsf_compare$IP.JRN.ARTC.SC, nsf_compare$data_papers_estimate, use='pairwise.complete.obs')
+
+ggplot((nsf_compare ), aes(y=data_papers_estimate, x=IP.JRN.ARTC.SC)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("Number of Papers according to NSF (2018)") +
+  ylab('Number of Papers using Data (2018)') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 100, y = 100,label = eq_plot_txt(nsf_compare, papers_estimate, IP.JRN.ARTC.SC), hjust=0.2)
+  ) +
+  bbc_style()
+```
 
 
 ## Results
@@ -650,10 +869,131 @@ Figure. Number of Articles using Data by Country (2000-2020)
 spi_mapper('country_scores_aggregate_df', 'data_papers', 'Number of Papers Using Data (2000-2020). Log Scale.')
 ```
 
+The top 5 countries make up more than 25% of all academic output using data.  However, these countries make up more than 40% of the World's population.  The top 25 countries make up more than 80% of output, while the bottom 50 countries produce less than 1% of output.  These shares do match roughly to the population size of each of these groups, with the top 25 countries making up around 80% of the World population and the bottom 50 countries making up less than 1% of the population.
+
+Figure. Distribution of Academic Output Across Countries.
+```{r lorenz}
+
+
+lorenz <- country_scores_aggregate_df %>%
+  arrange(SP.POP.TOTL) %>% #produce colors
+  filter(!is.na(SP.POP.TOTL)) %>%
+  mutate(
+         total=sum(data_papers),
+         total_pop=sum(SP.POP.TOTL, na.rm=TRUE),
+         share=100*data_papers/total,
+         share_pop=100*SP.POP.TOTL/total_pop) %>%
+  arrange(share) %>%
+  mutate(cumulative_pop=cumsum(share_pop)) %>%
+  mutate(cumulative_pos=cumulative_pop-share_pop/2) %>%
+  arrange(desc(share)) %>%
+  mutate(
+    colors=case_when(
+      between(row_number(),1,5) ~ "Top 5",
+      between(row_number(),1,50) ~ "Top 25",
+      between(row_number(),166,216) ~ "Bottom 50",
+      TRUE ~ "Middle"
+    )
+  )
+
+
+top_5 <- lorenz %>% 
+  ungroup() %>%
+  filter(colors=='Top 5') %>%
+  summarise(share=sum(share)) %>%
+  pull(share)
+
+top_pop <- lorenz %>% 
+  ungroup() %>%
+  filter(colors=='Top 5') %>%
+  summarise(pop=sum(share_pop, na.rm=TRUE)) %>%
+  pull(pop)
+
+
+bottom_50 <- lorenz %>% 
+  ungroup() %>%
+  filter(colors=='Bottom 50') %>%
+  summarise(share=sum(share)) %>%
+  pull(share)
+
+bottom_50_pop <- lorenz %>% 
+  ungroup() %>%
+  filter(colors=='Bottom 50') %>%
+  summarise(pop=sum(share_pop, na.rm=TRUE)) %>%
+  pull(pop)
+
+top_25 <- lorenz %>% 
+  ungroup() %>%
+  filter(colors=='Top 25' | colors=="Top 5") %>%
+  summarise(share=sum(share)) %>%
+  pull(share)
+
+
+top_25_pop <- lorenz %>% 
+  ungroup() %>%
+  filter(colors=='Top 25' | colors=="Top 5") %>%
+  summarise(pop=sum(share_pop, na.rm=TRUE)) %>%
+  pull(pop)
+
+ggplot(lorenz,  aes(x=cumulative_pos, y=share) ) +
+  geom_col(aes(width=share_pop), color='black', fill=min_col) +
+  bbc_style() +
+  geom_text(aes(label=iso3c), check_overlap = TRUE, nudge_y=0.5) +
+  xlab('') +
+  ylab('Share of Articles using Data') +
+  theme(
+    #axis.text.x = element_blank(),
+    panel.grid.major.x =  element_blank(),
+    panel.grid.major.y =  ggplot2::element_line(color="#cbcbcb")
+  ) +
+  labs(
+    caption='Columns sized according to country share of population'
+  ) +
+  annotate("label", x=80, y=6, label=paste0("Top 5 countries produce \n",round(top_5,digits=1), "% of all academic \n articles using data")) +
+  annotate("label", x=30, y=3, label=paste0("Top 25 countries produce \n",round(top_25,digits=1), "% of all academic \n articles using data")) +
+  annotate("label", x=10, y=1, label=paste0("Bottom 50 countries produce \n",round(bottom_50,digits=1), "% of all academic \n articles using data"))
+
+
+```
+
 
 ```{r}
 #spi_mapper_quintile('country_scores_aggregate_df', 'data_papers_pcap', 'Number of Papers Using Data per capita')
 ```
+
+
+
+There is much more imbalance when looking at the income groups.  Among income groups, high income countries produced nearly 50% of all papers using data from 2000-2020, despite only making up around 17% of the world's population.  Despite making up around 1/3rd of the world population, low income countries only produce around 5% of articles using data.
+
+Figure. Total Number of articles using data by income
+
+```{r}
+
+pop_income_df <- correlates_df %>%
+  left_join(country_metadata) %>%
+  group_by(income_level) %>%
+  summarise(pop=sum(SP.POP.TOTL, na.rm=T)) %>%
+  ungroup() %>%
+  mutate(share=pop/sum(pop))
+
+country_scores_aggregate_df %>%
+  group_by(income_level) %>%
+  summarise(data_papers=sum(data_papers)) %>%
+  ungroup() %>%
+  mutate(share=data_papers/sum(data_papers)) %>%
+  filter(income_level!="Not classified") %>%
+  mutate(income_level=factor(income_level, levels=c( "Low income", "Lower middle income", "Upper middle income","High income"))) %>%
+  ggplot( aes(y=data_papers, x=income_level, group=income_level)) +
+    geom_col(fill=min_col) +
+    geom_text(aes(label=scales::comma(data_papers)), hjust=-0.1) +
+    ylab('Number of Papers using Data') +
+    xlab("") +
+    scale_y_continuous(label=scales::comma) +
+    bbc_style() +
+    coord_flip() +
+    expand_limits(y=c(0,90000))
+```
+
 
 The numbers in the figure below shows the number of articles using data produced per million people in each region. When looking by region, Europe and Central Asia had the largest number of articles using data produced on a per capita basis with around 470 articles produced per million.  North America is second with around 460 per million.  South Asia produced the fewest number of papers per million with only around 65 articles produced per million persons.  
 
@@ -716,38 +1056,6 @@ plt_df <- plt_df %>%
     expand_limits(y=c(0,100))
 ```
 
-Among income groups, high income countries produced nearly 50% of all papers using data from 2000-2020, despite only making up around 17% of the world's population.  Despite making up around 1/3rd of the world population, low income countries only produce around 5% of articles using data.
-
-Figure. Total Number of articles using data by income
-
-```{r}
-
-pop_income_df <- correlates_df %>%
-  left_join(country_metadata) %>%
-  group_by(income_level) %>%
-  summarise(pop=sum(SP.POP.TOTL, na.rm=T)) %>%
-  ungroup() %>%
-  mutate(share=pop/sum(pop))
-
-country_scores_aggregate_df %>%
-  group_by(income_level) %>%
-  summarise(data_papers=sum(data_papers)) %>%
-  ungroup() %>%
-  mutate(share=data_papers/sum(data_papers)) %>%
-  filter(income_level!="Not classified") %>%
-  mutate(income_level=factor(income_level, levels=c( "Low income", "Lower middle income", "Upper middle income","High income"))) %>%
-  ggplot( aes(y=data_papers, x=income_level, group=income_level)) +
-    geom_col(fill=min_col) +
-    geom_text(aes(label=scales::comma(data_papers)), hjust=-0.1) +
-    ylab('Number of Papers using Data') +
-    xlab("") +
-    scale_y_continuous(label=scales::comma) +
-    bbc_style() +
-    coord_flip() +
-    expand_limits(y=c(0,90000))
-```
-
-
 The chart below shows the number of articles using data by region over time.  Note that only papers released prior to April 2020 are included in the S2ORC dataset currently, so in the year 2020 there is a reduced number of papers released.
 
 Figure. Articles Using Data over Time.
@@ -761,9 +1069,9 @@ country_scores_annual_df %>%
   bbc_style()
 ```
 
-There is a strong relationship between the number of articles produced using data and GDP, Population, and the SPI Overall score of a country.  Bivariate Regression coefficients from a regression of log number of data use papers on GDP, Population, and the SPI overall score is shown within the figures.  In the case of GDP and population, the regressions are on logged values of GDP or population as the case may be.
+There is a strong relationship between the number of articles produced using data and GDP per capita, Population, and the SPI Overall score of a country.  Bivariate Regression coefficients from a regression of log number of data use papers on GDP, Population, and the SPI overall score is shown within the figures.  In the case of GDP and population, the regressions are on logged values of GDP or population as the case may be.
 
-For GDP, the figures indicate an elasticity of 0.6, meaning that for instance a 10% increase in GDP translate into a 6% increase in academic articles using data.  Log GDP explains 77% of the variation ($R^2=0.77$) in the number of articles produced using data.  The elasticity with respect to population is similar in magnitude to that of GDP, and population alone explains 69% of the variation in academic articles using data.
+For GDP per capita, the figures indicate an elasticity of 0.4, meaning that for instance a 10% increase in GDP translate into a 4% increase in academic articles using data.  The elasticity with respect to population is slightly larger than of GDP per capita, with an elasticity of 0.6, and population alone explains 64% of the variation in academic articles using data.
 
 SPI overall scores, a measure of statistical performance, also are strongly predictive of academic output using data.  A 10 point increase in SPI scores, which is approximately the same as moving from the median SPI score to the 65th percentile, translates into around a .5% increase in the number of articles using data.
 
@@ -772,25 +1080,27 @@ Figure. Relationship between Papers using Data and Development Outcomes
 ```{r, fig.width=8, fig.height=12}
 
 #cor(reg_df$NY.GDP.MKTP.PP.KD, reg_df$papers_estimate, use='pairwise.complete.obs')
+reg_df_fixedn <- reg_df %>%
+  filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL) | is.na(SPI.INDEX)))
 
-p1 <- ggplot(reg_df, aes(y=data_papers, x=NY.GDP.MKTP.PP.KD)) +
+p1 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=NY.GDP.PCAP.PP.KD)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
   scale_x_log10(labels=scales::comma) +
   scale_y_log10(labels=scales::comma) +
-  xlab("GDP, PPP (constant 2017 international $)") +
+  xlab("GDP per capita, PPP (constant 2017 international $)") +
   ylab('Number of Papers using Data') +
   geom_smooth(method = "lm") +
   geom_richtext(
-    aes(x = 100000000000, y = 30,label = eq_plot_txt(reg_df, log(data_papers),log(NY.GDP.MKTP.PP.KD))), hjust=0.2, size=4
+    aes(x = 40000, y = 30,label = eq_plot_txt(reg_df_fixedn, log(data_papers),log(NY.GDP.PCAP.PP.KD))), hjust=0.2, size=4
   ) +
   bbc_style() +
   labs(
-    title='GDP'
+    title='GDP per capita'
   )
 
 
-p2 <- ggplot(reg_df, aes(y=data_papers, x=SP.POP.TOTL)) +
+p2 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SP.POP.TOTL)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
   scale_x_log10(labels=scales::comma) +
@@ -798,7 +1108,7 @@ p2 <- ggplot(reg_df, aes(y=data_papers, x=SP.POP.TOTL)) +
   xlab("Population, Total") +
   geom_smooth(method = "lm") +
   geom_richtext(
-    aes(x = 50000000, y = 30,label = eq_plot_txt(reg_df, log(data_papers),log(SP.POP.TOTL))), hjust=0.2, size=4
+    aes(x = 50000000, y = 30,label = eq_plot_txt(reg_df_fixedn, log(data_papers),log(SP.POP.TOTL))), hjust=0.2, size=4
   ) +
   bbc_style() +
   labs(title="Population") +
@@ -806,7 +1116,7 @@ p2 <- ggplot(reg_df, aes(y=data_papers, x=SP.POP.TOTL)) +
     axis.title.y = element_blank()
   )
 
-p3 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.OVRL)) +
+p3 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SPI.INDEX)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
   #scale_x_log10(labels=scales::comma) +
@@ -814,7 +1124,7 @@ p3 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.OVRL)) +
   xlab("SPI Overall Score") +
   geom_smooth(method = "lm") +
   geom_richtext(
-    aes(x = 40, y = 20,label = eq_plot_txt(reg_df, log(data_papers),IQ.SPI.OVRL)), hjust=0.2, size=4
+    aes(x = 40, y = 20,label = eq_plot_txt(reg_df_fixedn, log(data_papers),SPI.INDEX)), hjust=0.2, size=4
   ) +
   bbc_style() +
   labs(title="SPI Overall Score") +
@@ -842,7 +1152,7 @@ p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
 (p1 / p2 / p3) +
   plot_annotation(
     #title='Plot of SPI overall score on Poverty Ratio and Gini Index',
-    caption='Source: All indicators come from the World Bank. NY.GDP.MKTP.PP.KD, SP.POP.TOTL & IQ.SPI.OVRL.'
+    caption='Source: All indicators come from the World Bank. NY.GDP.PCAP.PP.KD, SP.POP.TOTL & IQ.SPI.OVRL.'
     ) +
   theme(
     axis.title = ggplot2::element_text(size=10),
@@ -850,29 +1160,215 @@ p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
   )
 ```
 
+The table below shows OLS regression coefficients from a regression of the log number of academic papers using data on log GDP per capita, log population, and the SPI scores. Log GDP per capita, population, and the SPI overall scores are all statistically significant at conventional levels.  Log GDP per capita and Log Population combined explain close to 75% of the variation between countries in academic output.  This is based on the R-squared from the linear regression.  When the SPI overall scores are added around 76% of the variation in explained.  The regressions indicate that a 10% increase in GDP per capita is associated with a 4.4% increase in academic output using data.  A 10% increase in population is associated with a 6.2% increase in academic output.  
+
+The performance of a country's statistical system also is associated with greater academic output.  Conditional on GDP per capita and population, a ten point increase in SPI overall scores (on a scale of 0-100) translates into a 0.2% increase in academic output.  The SPI pillar most strongly linked to academic output is the pillar on data sources, which cover the availability of recent censuses, surveys, academic data, and geospatial data..
+
 Table. Relationships between Number of Papers Using Data and Statistical Performance Scores
 ```{r}
 
-reg_df_fixedn <- reg_df %>%
-  filter(!(is.na(NY.GDP.MKTP.PP.KD) | is.na(SP.POP.TOTL) | is.na(IQ.SPI.OVRL)))
+
 
 models <- list(
-  'GDP'=lm_robust(log(data_papers) ~ log(NY.GDP.MKTP.PP.KD), data=reg_df_fixedn) ,
-  'Population'=lm_robust(log(data_papers) ~ log(SP.POP.TOTL), data=reg_df_fixedn) ,  
-  'GDP + Population'=lm_robust(log(data_papers) ~ log(NY.GDP.MKTP.PP.KD) + log(SP.POP.TOTL), data=reg_df_fixedn) ,  
-  'SPI'=lm_robust(log(data_papers) ~ IQ.SPI.OVRL, data=reg_df_fixedn) ,  
-  'SPI + Population + GDP'=lm_robust(log(data_papers) ~ IQ.SPI.OVRL + log(NY.GDP.MKTP.PP.KD) + log(SP.POP.TOTL), data=reg_df_fixedn)
-)
+  '(1)'=lm_robust(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD), data=reg_df_fixedn) ,
+  '(2)'=lm_robust(log(data_papers) ~ log(SP.POP.TOTL), data=reg_df_fixedn) ,  
+  '(3)'=lm_robust(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL), data=reg_df_fixedn) ,  
+  #'(4)'=lm_robust(log(data_papers) ~ SPI.INDEX, data=reg_df_fixedn) ,  
+  '(4)'=lm_robust(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL), data=reg_df_fixedn),
+  #'(6)'=lm_robust(log(data_papers) ~ SPI.INDEX + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 , data=reg_df_fixedn) ,  
+  '(5)'=lm_robust(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn)
+  # '(6)'=lm_robust(log(data_papers) ~ SPI.D4.1.1.POPU + SPI.D4.1.2.AGRI + SPI.D4.1.3.BIZZ + SPI.D4.1.4.HOUS + SPI.D4.1.5.AGSVY + SPI.D4.1.6.LABR + SPI.D4.1.7.HLTH + SPI.D4.1.8.BZSVY +  SPI.D4.2.3.CRVS + SPI.D4.3.GEO.first.admin.level + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn) 
+  )
 
 modelsummary(models,
              estimate= "{estimate}{stars}",
-             coef_rename = c("IQ.SPI.OVRL" = "SPI Overall Score",
-                             "IQ.SPI.PIL1" = "SPI Data Use Score",
-                             "IQ.SPI.PIL2" = "SPI Data Services Score",
-                             "IQ.SPI.PIL3" = "SPI Data Products Score",
-                             "IQ.SPI.PIL4" = "SPI Data Sources Score",
-                             "IQ.SPI.PIL5" = "SPI Data Infrastructure Score",
+             coef_rename = c("SPI.INDEX" = "SPI Overall Score",
+                             "SPI.INDEX.PIL1" = "SPI Data Use Score",
+                             "SPI.INDEX.PIL2" = "SPI Data Services Score",
+                             "SPI.INDEX.PIL3" = "SPI Data Products Score",
+                             "SPI.INDEX.PIL4" = "SPI Data Sources Score",
+                             "SPI.INDEX.PIL5" = "SPI Data Infrastructure Score",
                              "log(NY.GDP.MKTP.PP.KD)" = "Log GDP",
+                             "log(NY.GDP.PCAP.PP.KD)" = "Log GDP per capita",
+                             "log(NY.GDP.PCAP.PP.CD^2)" = "Log GDP",
+                             "region"="Region",
+                             "log(SP.POP.TOTL)"="Log Population",
+                             "log(poverty_surveys)" = 'Log # of Poverty Surveys',
+                             "SG.LAW.INDX" = "Women Business and the Law Index Score (scale 1-100)",
+                             "gii"="Gender Inequality Index",
+                             "sigi"="Social Institutions and Gender Index"
+                             ),
+             notes="Data from the World Bank's World Development Indicators (WDI) and SPI.  WDI series codes include NY.GDP.PCAP.PP.KD, SP.POP.TOTL, IQ.SPI.OVRL,IQ.SPI.PIL1,IQ.SPI.PIL2, IQ.SPI.PIL3, IQ.SPI.PIL4, IQ.SPI.PIL5.  Papers include all papers using data years 2000-2020.
+              ***=0.001 level
+              **=0.01 level
+              *=0.05 level
+              +=0.1 level",
+             gof_map = gm,
+             escape = FALSE,
+             fmt = 2
+             )
+
+```
+
+Using more detailed data from the Statistical Performance Indicators it is possible to assess how the availability of specific data sources relates to academic output.  The figure below shows the partial linear regression coefficient for the availability of each of the 10 data sources considered by the SPI, conditional on log GDP per capita and log population.  The ten data sources include: population census, agriculture census, business/establishment census, household consumption/income survey, agriculture survey, labor force survey, health survey, business/establishment survey, civil registration and vital statistics system (CRVS), and geospatial data at the Admin 1 (usually province/state) level.  
+
+The regression estimates indicate that the availability of a population census in the past 10 years is associated with an almost .6% increase in papers using data  This estimate is significant at the 5% level.  The availability of 2 or more household surveys measuring income/consumption in the past 10 years is associated with around a 0.5% increase in papers using data.  This is also sifnificant at the 5% level.  The availability of agricultural surveys is also a significant predictor at the 5% level.  The share of indicators available at the Admin 1 level, calculated by Open Data Watch for their Open Data Inventory (ODIN) is associated with a 1% increase in academic output using data. 
+
+
+Figure. Relationships between Number of Papers Using Data and Availability of Data Sources.
+
+```{r}
+
+reg_df_fixedn <- reg_df_fixedn %>%
+  mutate(
+    Pop.Cen=as.numeric(SPI.D4.1.1.POPU==1),
+    Ag.Cen=as.numeric(SPI.D4.1.2.AGRI==1),
+    Bizz.Cen=as.numeric(SPI.D4.1.3.BIZZ==1),
+    House.Svy=as.numeric(SPI.D4.1.4.HOUS>=0.5),
+    Ag.Svy=as.numeric(SPI.D4.1.5.AGSVY>=0.5),
+    Labr.Svy=as.numeric(SPI.D4.1.6.LABR>=0.5),
+    Hlth.Svy=as.numeric(SPI.D4.1.7.HLTH>=0.5),
+    Bizz.Svy=as.numeric(SPI.D4.1.8.BZSVY>=0.5),
+    CRVS=as.numeric(SPI.D4.2.3.CRVS==1)
+  )
+
+source_models <- list(
+  '(1)'=lm_robust(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) + Pop.Cen   , data=reg_df_fixedn),
+  '(2)'=lm_robust(log(data_papers) ~ Ag.Cen + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn),
+  '(3)'=lm_robust(log(data_papers) ~ Bizz.Cen +  log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn),
+  '(4)'=lm_robust(log(data_papers) ~  House.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn),
+  '(5)'=lm_robust(log(data_papers) ~  Ag.Svy + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn),
+  '(6)'=lm_robust(log(data_papers) ~  Labr.Svy + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn),
+  '(7)'=lm_robust(log(data_papers) ~ Hlth.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn),
+  '(8)'=lm_robust(log(data_papers) ~  Bizz.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn),
+  '(9)'=lm_robust(log(data_papers) ~  CRVS  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn),
+  '(10)'=lm_robust(log(data_papers) ~ SPI.D4.3.GEO.first.admin.level + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn) 
+  )
+
+
+
+modelplot(source_models,
+          coef_map= c("SPI.INDEX" = "SPI Overall Score",
+                             "SPI.INDEX.PIL1" = "SPI Data Use Score",
+                             "SPI.INDEX.PIL2" = "SPI Data Services Score",
+                             "SPI.INDEX.PIL3" = "SPI Data Products Score",
+                             "SPI.INDEX.PIL4" = "SPI Data Sources Score",
+                             "SPI.INDEX.PIL5" = "SPI Data Infrastructure Score",
+
+                             "SPI.D4.1.1.POPU" = "Population Census Score" ,
+                             "SPI.D4.1.2.AGRI" = "Agriculture Census Score",
+                             "SPI.D4.1.3.BIZZ" = "Business Census Score",
+                             "SPI.D4.1.4.HOUS" = "Household Income/Consumption Survey Score",
+                             "SPI.D4.1.5.AGSVY"= "Agriculture Survey Score" , 
+                             "SPI.D4.1.6.LABR" = "Labor Force Survey Score", 
+                             "SPI.D4.1.7.HLTH" = "Health Survey Score", 
+                             "SPI.D4.1.8.BZSVY" = "Business/Establishment Survey Score",
+                             "SPI.D4.2.3.CRVS" = "Complete Civil Registration and Vital Statistics System Score",
+                             
+                             "SPI.D4.3.GEO.first.admin.level"= "Availability of Data at 1st Admin Level (ODIN) Score",
+                             "CRVS" = "Complete Civil Registration and Vital Statistics System",
+                              "Bizz.Svy" = "Business/Establishments: 2 or more in 10 years",
+                             "Hlth.Svy" = "Health Surveys: 2 or more in 10 years", 
+                               "Labr.Svy" = "Labor Force Surveys: 2 or more in 10 years", 
+                               "Ag.Svy"= "Agriculture Surveys: 2 or more in 10 years" , 
+                             "House.Svy" = "Household surveys: 2 or more in 10 years",
+                             "Bizz.Cen" = "Business/Establishment Census in past 10 years",
+                               "Ag.Cen" = "Agriculture Census  in past 10 years",
+                            "Pop.Cen" = "Population Census in past 10 years" 
+                             
+
+                             ),
+          ) +
+  labs(subtitle='Partial regression coefficients conditional on \n log GDP per capita and log population.',
+      caption="Data from the World Bank's World Development Indicators (WDI) and SPI. \n Papers include all papers using data years 2000-2020. \n Confidence Intervals at 95% significance level") +
+  theme(
+    legend.position = 'none'
+  )
+
+# 
+# modelsummary(source_models,
+#              estimate= "{estimate}{stars}",
+#              coef_map= c("SPI.INDEX" = "SPI Overall Score",
+#                              "SPI.INDEX.PIL1" = "SPI Data Use Score",
+#                              "SPI.INDEX.PIL2" = "SPI Data Services Score",
+#                              "SPI.INDEX.PIL3" = "SPI Data Products Score",
+#                              "SPI.INDEX.PIL4" = "SPI Data Sources Score",
+#                              "SPI.INDEX.PIL5" = "SPI Data Infrastructure Score",
+# 
+#                              "SPI.D4.1.1.POPU" = "Population Census Score" ,
+#                              "SPI.D4.1.2.AGRI" = "Agriculture Census Score",
+#                              "SPI.D4.1.3.BIZZ" = "Business Census Score",
+#                              "SPI.D4.1.4.HOUS" = "Household Income/Consumption Survey Score",
+#                              "SPI.D4.1.5.AGSVY"= "Agriculture Survey Score" , 
+#                              "SPI.D4.1.6.LABR" = "Labor Force Survey Score", 
+#                              "SPI.D4.1.7.HLTH" = "Health Survey Score", 
+#                              "SPI.D4.1.8.BZSVY" = "Business/Establishment Survey Score",
+#                              "SPI.D4.2.3.CRVS" = "Complete Civil Registration and Vital Statistics System Score",
+#                              
+#                              "Pop.Cen" = "Population Census in past 10 years" ,
+#                              "Ag.Cen" = "Agriculture Census  in past 10 years",
+#                              "Bizz.Cen" = "Business/Establishment Census in past 10 years",
+#                              "House.Svy" = "Household surveys: 2 or more in 10 years",
+#                              "Ag.Svy"= "Agriculture Surveys: 2 or more in 10 years" , 
+#                              "Labr.Svy" = "Labor Force Surveys: 2 or more in 10 years", 
+#                              "Hlth.Svy" = "Health Surveys: 2 or more in 10 years", 
+#                              "Bizz.Svy" = "Business/Establishments: 2 or more in 10 years",
+#                              "CRVS" = "Complete Civil Registration and Vital Statistics System",
+#                              "SPI.D4.3.GEO.first.admin.level"= "Availability of Data at 1st Admin Level (ODIN) Score",
+#                              
+#                              "log(NY.GDP.MKTP.PP.KD)" = "Log GDP",
+#                              "log(NY.GDP.PCAP.PP.KD)" = "Log GDP per capita",
+#                              "log(NY.GDP.PCAP.PP.CD^2)" = "Log GDP",
+#                              "region"="Region",
+#                              "log(SP.POP.TOTL)"="Log Population",
+#                              "log(poverty_surveys)" = 'Log # of Poverty Surveys',
+#                              "SG.LAW.INDX" = "Women Business and the Law Index Score (scale 1-100)",
+#                              "gii"="Gender Inequality Index",
+#                              "sigi"="Social Institutions and Gender Index"
+#                              ),
+#              notes="Data from the World Bank's World Development Indicators (WDI) and SPI. Papers include all papers using data years 2000-2020.
+#               ***=0.001 level
+#               **=0.01 level
+#               *=0.05 level
+#               +=0.1 level",
+#              gof_map = gm,
+#              escape = FALSE,
+#              fmt = 2
+#              )
+
+```
+
+
+
+```{r fixest, eval=FALSE, include=FALSE}
+
+reg_df_annual_fixedn <-  country_scores_annual_df %>%
+  filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL))) %>%
+  filter(data_papers>0)
+
+models <- list(
+  '(1)'=fixest::feols(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) | iso3c + date, data=reg_df_annual_fixedn) ,
+  '(2)'=fixest::feols(log(data_papers) ~ log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn) ,  
+  '(3)'=fixest::feols(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn) ,  
+  '(4)'=fixest::feols(log(data_papers) ~ SPI.INDEX | iso3c + date, data=reg_df_annual_fixedn) ,  
+  '(5)'=fixest::feols(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn),
+  '(6)'=fixest::feols(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 | iso3c + date, data=reg_df_annual_fixedn) ,  
+  '(7)'=fixest::feols(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn),  
+  '(8)'=fixest::feols(log(data_papers) ~ IQ.SCI.OVRL | iso3c + date, data=reg_df_annual_fixedn) ,  
+  '(9)'=fixest::feols(log(data_papers) ~ IQ.SCI.OVRL + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn)
+
+  )
+
+modelsummary(models,
+             estimate= "{estimate}{stars}",
+             coef_rename = c("SPI.INDEX" = "SPI Overall Score",
+                             "SPI.INDEX.PIL1" = "SPI Data Use Score",
+                             "SPI.INDEX.PIL2" = "SPI Data Services Score",
+                             "SPI.INDEX.PIL3" = "SPI Data Products Score",
+                             "SPI.INDEX.PIL4" = "SPI Data Sources Score",
+                             "SPI.INDEX.PIL5" = "SPI Data Infrastructure Score",
+                             "log(NY.GDP.MKTP.PP.KD)" = "Log GDP",
+                             "log(NY.GDP.PCAP.PP.KD)" = "Log GDP per capita",
                              "log(NY.GDP.PCAP.PP.CD^2)" = "Log GDP",
                              "region"="Region",
                              "log(SP.POP.TOTL)"="Log Population",
@@ -882,7 +1378,7 @@ modelsummary(models,
                              "sigi"="Social Institutions and Gender Index"
                              ),
              notes="",
-             gof_map = gm,
+             #gof_map = gm,
              escape = FALSE,
              fmt = 2
              )
@@ -911,22 +1407,23 @@ ggplot(country_scores_aggregate_df, aes(y=data_papers, x=papers, label=iso3c)) +
 
 
 
-Below we show the countries that over or underperform GDP, PPP in 2019.
+Below we show the countries that over or underperform in terms of their GDP per capita in 2020 compared to the number of papers using data per million persons.  This is a way to check for "outliers" in terms of log per capita academic output compared to log per capita GDP.  This analysis is similar to that done in @das2013us.
 
 ```{r}
 
 
 
 
-gdp_df_2019 <- country_scores_annual_df %>%
-  filter(date==2019)
+gdp_df_2019 <- country_scores_aggregate_df %>%
+  filter(data_papers>0) %>%
+  mutate(data_papers_pcap=10^6*data_papers/SP.POP.TOTL)
 
-mod <- lm(data_papers~ log(NY.GDP.MKTP.PP.KD) , data=gdp_df_2019) 
+mod <- lm(log(data_papers_pcap) ~ log(NY.GDP.PCAP.PP.KD),  data=gdp_df_2019) 
 #summary(mod)
 
 indicator <- 'data_papers'
 
-form <- paste(indicator, " ~ log(NY.GDP.MKTP.PP.KD)", sep="")
+form <- paste(indicator, " ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL)", sep="")
 
 
 gdp_overperformers_df <- gdp_df_2019 %>%
@@ -950,6 +1447,7 @@ gdp_overperformers_plot <- gdp_overperformers_plot %>%
   ggplot(aes(x=country, y=resid, color=group)) +
   geom_segment( aes(x=country ,xend=country, y=0, yend=resid), color="black") +
   geom_point(size=3) +
+  scale_y_continuous(labels=scales::comma) +
   scale_color_manual(name="GDP",
                      labels = c("Over-performers", "Under-performers"),
                      values = c('above'="#1A9850", 'below'="#D73027")) +
@@ -962,67 +1460,86 @@ gdp_overperformers_plot <- gdp_overperformers_plot %>%
   ) +
   xlab("") +
   ylab("Data Use Articles (deviation)") +
-  ggtitle("Over/Under Perfomers - GDP",
-          subtitle='GDP, PPP (constant 2017 international $)')
+  ggtitle("Over/Under Perfomers - GDP per capita"
+          )
 
+
+
+```
+Figure. Over/Underperformers of Academic Output Using Data per Million Persons Compared to GDP per capita.
+```{r}
+p1 <- ggplot(gdp_df_2019, aes(y=data_papers_pcap, x=NY.GDP.PCAP.PP.KD)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  scale_x_log10(labels=scales::comma) +
+  scale_y_log10(labels=scales::comma) +
+  xlab("GDP per capita, PPP (constant 2017 international $)") +
+  ylab('Number of Papers using Data per million persons') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 40000, y = 30,label = eq_plot_txt(gdp_df_2019, log(data_papers_pcap),log(NY.GDP.PCAP.PP.KD))), hjust=0.2, size=4
+  ) +
+  bbc_style() +
+  labs(
+    title='Outliers in GDP per capita'
+  )
+
+p1 
+```
+
+Figure. Top 15 Over/Underperformers Compared to GDP per capita.
+```{r}
 gdp_overperformers_plot
-
 ```
 
 
-## Comparison to Das et al. (2013) and Porteous (2022)
+## Sensitivity Checks
 
+As noted previously, medical articles make up around 81% of all articles in our corpus.  A concern could be that medical articles then receive too much weight in our final calculations of country scores.  As a check, an alternative measure of the production of articles using data, which drops all medical articles, will be compared to the totals of the number of articles usind data described above.
 
-Figure. Comparison to Number of Academic Articles in Das, Do, Shaines, and Srikant (2013)
+Figure. Comparison Between All Papers in Corpus Using Data and Non-Medical Papers Using Data
+```{r med}
 
-```{r}
-das_porteous_compare_df <- read_csv(paste0(raw_data, "/das_porteous_compare.csv")) %>%
-  rename(country=`Country name`,
-         das_papers=`Das Total number of publications (1985–2005)`,
-         porteous_papers=`Porteous All Journals`) %>%
-  left_join(country_scores_aggregate_df)
-
-#plot das et al papers against our measrue
-#cor(das_porteous_compare_df$das_papers, das_porteous_compare_df$papers_estimate, use='pairwise.complete.obs')
-
-ggplot(das_porteous_compare_df, aes(y=papers_estimate, x=das_papers)) +
+ggplot(country_scores_aggregate_df, aes(x=data_papers, y=data_papers_nomed)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
   scale_x_log10(labels=scales::comma) +
   scale_y_log10(labels=scales::comma) +
-  xlab("Number of Papers according to Das, Do, Shaines, and Srikant (2013)") +
-  ylab('Number of Papers using Data (2000-2020)') +
+  xlab("All Papers Using Data") +
+  ylab("Non-Medical Papers Using Data") +
   geom_smooth(method = "lm") +
   geom_richtext(
-    aes(x = 100, y = 100,label = eq_plot_txt(das_porteous_compare_df, papers_estimate, das_papers), hjust=0.2)
+    aes(x = 40, y = 20,label = eq_plot_txt(country_scores_aggregate_df, data_papers_nomed,data_papers)), hjust=0.2, size=4
   ) +
-  bbc_style()
+  bbc_style() 
 
-#plot porteous papers against our measrue
-#cor(das_porteous_compare_df$porteous_papers, das_porteous_compare_df$papers_estimate, use='pairwise.complete.obs')
 
 ```
 
-Figure. Comparison to Number of Academic Articles in Porteous (2022)
-```{r}
+There are differences in academic output between subjects. The chart below shows the relationships between the number of articles per country using data for all subjects and for each subject respectively between 2000 and 2020. In all cases, academic output using data is strongly correlated across subjects.  The correlation between the number of medical articles using data and economics is around 0.94.  The subjects with the greatest correlation in articles using data is Political Science and Sociology with a correlation close to 0.98.  Economics and Psychology have the lowest correlation (~0.75).
 
-ggplot((das_porteous_compare_df ), aes(y=papers_estimate, x=porteous_papers)) +
-  geom_point() +
-  geom_text_repel(aes(label=iso3c)) +
-  scale_x_log10(labels=scales::comma) +
-  scale_y_log10(labels=scales::comma) +
-  xlab("Number of Papers according to Porteous (2022)") +
-  ylab('Number of Papers using Data (2000-2020)') +
-  geom_smooth(method = "lm") +
-  geom_richtext(
-    aes(x = 100, y = 100,label = eq_plot_txt(das_porteous_compare_df, papers_estimate, porteous_papers), hjust=0.2)
-  ) +
-  bbc_style()
+Figure. Correlation in Papers Using Data Across Subjects.  2000-2020.
+```{r, fig.width=10, fig.height=8}
+library(GGally)
+
+ggally_df <- country_scores_aggregate_df  %>%
+  select(data_papers, data_papers_Medicine, data_papers_Economics, data_papers_Psychology, data_papers_Sociology, data_papers_Political_Science)
+
+ggpairs(ggally_df,
+        columnLabels=c("All", "Medicine", "Economics", "Psychology", "Sociology", "Poli Sci")) +
+  theme_few() +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(subtitle="Logged number of Articles")
 ```
 
 
 
-## Country Rankings
+
+
+
+
+## Annual Country Rankings
 
 The S2ORC database contains papers released up to April 14, 2020.  Because the year 2020 is only partially captured, annual country scores on academic data use will be released up until 2019.  Future data collection will take place to incorporate papers after April 2020.
 
@@ -1032,7 +1549,7 @@ The first use of data measure is a per capita measure, $UoD_i$, where for each c
 
 $UoD_i=  D_i  /N_i$
 
-A second measure will be considered including a regression adjusted measure that adjust for other factors in the country such as the population size and GDP This approach responds to the findings in @das2013us, who note in their study of cross-country differences in economic academic output that around 75% of the cross-country variation in economics output is accounted for by population size and income alone. A regression adjusted measure then may be better able to isolate differences in national statistical systems, as opposed to differences between countries in population and income. In this case the use of data measure for country i will be the difference between the actual number of academic articles using data and those predicted based on population and GDP. 
+A second measure will be considered including a regression adjusted measure that adjust for other factors in the country: population size and GDP per capita. This approach responds to the findings in @das2013us, who note in their study of cross-country differences in economic academic output that around 75% of the cross-country variation in economics output is accounted for by population size and income alone. A regression adjusted measure then may be better able to isolate differences in national statistical systems, as opposed to differences between countries in population and income. In this case the use of data measure for country i will be the difference between the actual number of academic articles using data and those predicted based on population and GDP. 
 
 $UoD'_i= D_i-\hat{D}_i$
 
@@ -1061,12 +1578,14 @@ Because of volatility in the number of publications for a country in a particula
 data_use_df <- country_scores_annual_df %>%
   mutate(
     data_use_pcap=10^6*data_papers/SP.POP.TOTL,
-    data_use_pcap_3yr=10^6*data_papers_3yr/SP.POP.TOTL
+    data_use_pcap_3yr=10^6*data_papers_3yr/SP.POP.TOTL,
+    data_use_gdp_pcap=10^2*data_papers/NY.GDP.PCAP.PP.KD,
+    data_use_gdp_pcap_3yr=10^2*data_papers_3yr/NY.GDP.PCAP.PP.KD
   )
 
   
 # regression adjusted
-mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL) | date , data=country_scores_annual_df) 
+mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD) | date,  data=data_use_df) 
 
 data_use_df <- data_use_df %>%
   modelr::add_residuals(mod, var='data_use_reg_adjusted_3yr') 
@@ -1101,55 +1620,79 @@ col_palette <- c("#2ec4b6", "#acece7", "#f1dc76",  "#ffbf69","#ff9f1c"   )
 col_palette2 <- c("#2ec4b6",  "#f1dc76", "#ff9f1c" )
 
 #make the table
-index_tab <- data_use_df %>%
+index_df <- data_use_df %>%
   filter(date==2019) %>%
+  ungroup() %>%
   select(country, data_use_pcap_3yr,data_use_reg_adjusted_3yr,data_use_ratio_3yr, data_papers ) %>%
   mutate(across(c('data_use_pcap_3yr','data_use_reg_adjusted_3yr','data_use_ratio_3yr'),round,2)) %>%
   arrange(desc(data_use_reg_adjusted_3yr))
 
  #calculate the breaks for the color coding
-        brks <- quantile(index_tab$data_use_pcap_3yr, probs=c(1,2,3,4)/5,na.rm=T)
-        brks <- append(min(index_tab$data_use_pcap_3yr, na.rm=T),brks)
-        brks <- append(brks,max(index_tab$data_use_pcap_3yr, na.rm=T))
+        brks <- quantile(index_df$data_use_pcap_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        brks <- append(min(index_df$data_use_pcap_3yr, na.rm=T),brks)
+        brks <- append(brks,max(index_df$data_use_pcap_3yr, na.rm=T))
 
-        brks1 <- quantile(index_tab$data_use_reg_adjusted_3yr, probs=c(1,2,3,4)/5,na.rm=T)
-        brks1 <- append(min(index_tab$data_use_reg_adjusted_3yr, na.rm=T),brks1)
-        brks1 <- append(brks1,max(index_tab$data_use_reg_adjusted_3yr, na.rm=T))
+        # brks1 <- quantile(index_df$data_use_gdp_pcap_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        # brks1 <- append(min(index_df$data_use_gdp_pcap_3yr, na.rm=T),brks1)
+        # brks1 <- append(brks1,max(index_df$data_use_gdp_pcap_3yr, na.rm=T))
+
+        brks2 <- quantile(index_df$data_use_reg_adjusted_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        brks2 <- append(min(index_df$data_use_reg_adjusted_3yr, na.rm=T),brks2)
+        brks2 <- append(brks2,max(index_df$data_use_reg_adjusted_3yr, na.rm=T))     
         
-        brks2 <- quantile(index_tab$data_use_ratio_3yr, probs=c(1,2,3,4)/5,na.rm=T)
-        brks2 <- append(min(index_tab$data_use_ratio_3yr, na.rm=T),brks2)
-        brks2 <- append(brks2,max(index_tab$data_use_ratio_3yr, na.rm=T))
-        
+        brks3 <- quantile(index_df$data_use_ratio_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        brks3 <- append(min(index_df$data_use_ratio_3yr, na.rm=T),brks3)
+        brks3 <- append(brks3,max(index_df$data_use_ratio_3yr, na.rm=T))       
 
       #make nice looking
-      index_tab <- index_tab %>%
+      index_tab <- index_df %>%
         flextable() %>%
         # add_header_lines('SPI overall score in 2020 and Pillar Scores.') %>%
         set_header_labels(values=list(
                              country="Country",
                              data_use_pcap_3yr="Academic Data Use per capita",
+                             #data_use_gdp_pcap_3yr="Academic Data Use per $100 of GDP per capita",
                              data_use_reg_adjusted_3yr="Academic Data Use Regression Adjusted",
                              data_use_ratio_3yr="Academic Data Use as Fraction of All Papers",
                              data_papers = "Total Academic Publications using Data"
 
                                          )) %>%
           bg(j = c('data_use_pcap_3yr'),
-             bg = scales::col_bin(col_palette, domain=c(0,100), bins=brks, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks, reverse=TRUE)) %>%
+          # bg(j = c('data_use_gdp_pcap_3yr'),
+          #    bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks1, reverse=TRUE)) %>%        
           bg(j = c('data_use_reg_adjusted_3yr'),
-             bg = scales::col_bin(col_palette, domain=c(0,100), bins=brks1, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette, domain=c(-100,100), bins=brks2, reverse=TRUE)) %>%
           bg(j = c('data_use_ratio_3yr'),
-             bg = scales::col_bin(col_palette, domain=c(0,100), bins=brks2, reverse=TRUE)) 
+             bg = scales::col_bin(col_palette, domain=c(0,100), bins=brks3, reverse=TRUE)) 
 
 index_tab %>%
   autofit()
 ```
 
+Figure. Number of Articles using Data by Country (2000-2020)
+```{r}
 
+map_df <- data_use_df %>%
+  filter(date==2019) %>%
+  ungroup() 
 
-## Conclusions
+spi_mapper_quintile('map_df', 'data_use_reg_adjusted_3yr', 'Academic Data Use - Regression Adjusted (2017-2019). Log Scale.')
+```
 
+# Conclusions
 
+This paper suggests a methodology for measuring data use by academia by classifying academic articles using natural language processing tools.  The NLP model can classify whether articles do or do not use data with 87% accuracy and match human rated classifications of academic output using data per country with a correlation of around 0.99. These measures also correlate strongly with alternative measures in the literature.  
 
+Applying the NLP model to a corpus of around 1 million academic articles a few key findings are revealed.  High income countries produce a disproportionate share of academic output using data compared to their population.  High income countries produce around 50% of all articles, while making up only 17% of the world population.  Low income countries produce only 5% of academic output using data, while making  up 1/3rd of the population.  Second, GDP per capita and population are strong predictors of academic output, explaining around 75% of the variation between countries.  Finally, statistical performance is a strong predictor of academic output using data, particularly in the case of data sources.  Finally, a set of annual measures of academic output for 216 countries are produced.  
+
+With hundreds of millions spent on statistical capacity measures, the approach in this paper offers one metric for judging the effectiveness of these investments. 
+
+Next steps:   
+
+  - Include final 10 million or so articles   
+  - Further improve model performance   
+  - Release as set of indicators for SPI
 
 
 
@@ -1157,7 +1700,275 @@ index_tab %>%
 
 <div id="refs"></div>
 
+
 # Appendix
+
+## Machine Learning Approach
+
+Add Xioayu's description of the model.
+
+## Country Scores by Subject
+
+```{r subjscrs}
+#calculate table with scores by country
+# three measures
+# per capita
+# regression adjusted
+# fraction of papers
+
+# start with per capita
+data_use_subjects_df <- country_scores_annual_df %>%
+  # mutate(
+  #   across(c("data_papers_Economics",
+  #            "data_papers_Psychology",
+  #            "data_papers_Sociology",
+  #            "data_papers_Political Science",
+  #            "data_papers_Medicine"),
+  #   ~10^6*./SP.POP.TOTL,
+  #   .names={'{.col}_pcap'}
+  #   )
+  # ) %>%
+  mutate(
+    across(c("data_papers_3yr_Economics",
+             "data_papers_3yr_Psychology",
+             "data_papers_3yr_Sociology",
+             "data_papers_3yr_Political Science",
+             "data_papers_3yr_Medicine"),
+    ~10^6*./SP.POP.TOTL,
+    .names={'{.col}_pcap'}
+    )
+  )
+  
+# regression adjusted
+mod1 <- fixest::feols(log(data_papers_3yr_Economics) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
+mod2 <- fixest::feols(log(data_papers_3yr_Psychology) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
+mod3 <- fixest::feols(log(data_papers_3yr_Sociology) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
+mod4 <- fixest::feols(log(`data_papers_3yr_Political Science`) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
+mod5 <- fixest::feols(log(data_papers_3yr_Medicine) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
+
+data_use_subjects_df <- data_use_subjects_df %>%
+  modelr::add_residuals(mod1, var='data_papers_3yr_Economics_adjusted') %>%
+  modelr::add_residuals(mod2, var='data_papers_3yr_Psychology_adjusted') %>%
+  modelr::add_residuals(mod3, var='data_papers_3yr_Sociology_adjusted') %>%
+  modelr::add_residuals(mod4, var='data_papers_3yr_Political_Science_adjusted') %>%
+  modelr::add_residuals(mod5, var='data_papers_3yr_Medicine_adjusted') 
+
+```
+
+
+Table. Country Scores on Academic Data Use by Subject of Article.  Per capita measure. Year 2019.
+```{r subjtab}
+
+#colors
+
+col_palette <- c("#2ec4b6", "#acece7", "#f1dc76",  "#ffbf69","#ff9f1c"   )
+
+col_palette2 <- c("#2ec4b6",  "#f1dc76", "#ff9f1c" )
+
+#make the table
+index_tab_df <- data_use_subjects_df %>%
+  filter(date==2019) %>%
+  ungroup() %>%
+  select(country, ends_with('_pcap') ) %>%
+  mutate(across(ends_with('_pcap'),round,2)) %>%
+  left_join((index_df %>% select(country, data_use_pcap_3yr))) %>%
+  select(country, data_use_pcap_3yr, everything()) %>%
+  arrange(desc(data_use_pcap_3yr))
+
+ #calculate the breaks for the color coding
+        brks <- quantile(index_tab_df$data_use_pcap_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        brks <- append(min(index_tab_df$data_use_pcap_3yr, na.rm=T),brks)
+        brks <- append(brks,max(index_tab_df$data_use_pcap_3yr, na.rm=T))
+
+        brks1 <- quantile(index_tab_df$data_papers_3yr_Economics_pcap, probs=c(1,2,3,4)/5,na.rm=T)
+        brks1 <- append(min(index_tab_df$data_papers_3yr_Economics_pcap, na.rm=T),brks1)
+        brks1 <- append(brks1,max(index_tab_df$data_papers_3yr_Economics_pcap, na.rm=T))
+
+        brks2 <- quantile(index_tab_df$data_papers_3yr_Psychology_pcap, probs=c(1,2,3,4)/5,na.rm=T)
+        brks2 <- append(min(index_tab_df$data_papers_3yr_Psychology_pcap, na.rm=T),brks1)
+        brks2 <- append(brks1,max(index_tab_df$data_papers_3yr_Psychology_pcap, na.rm=T))
+        
+        brks3 <- quantile(index_tab_df$data_papers_3yr_Sociology_pcap, probs=c(1,2,3,4)/5,na.rm=T)
+        brks3 <- append(min(index_tab_df$data_papers_3yr_Sociology_pcap, na.rm=T),brks1)
+        brks3 <- append(brks1,max(index_tab_df$data_papers_3yr_Sociology_pcap, na.rm=T))
+        
+        brks4 <- quantile(index_tab_df$`data_papers_3yr_Political Science_pcap`, probs=c(1,2,3,4)/5,na.rm=T)
+        brks4 <- append(min(index_tab_df$`data_papers_3yr_Political Science_pcap`, na.rm=T),brks1)
+        brks4 <- append(brks1,max(index_tab_df$`data_papers_3yr_Political Science_pcap`, na.rm=T))
+        
+        brks5 <- quantile(index_tab_df$data_papers_3yr_Medicine_pcap, probs=c(1,2,3,4)/5,na.rm=T)
+        brks5 <- append(min(index_tab_df$data_papers_3yr_Medicine_pcap, na.rm=T),brks1)
+        brks5 <- append(brks1,max(index_tab_df$data_papers_3yr_Medicine_pcap, na.rm=T))
+        
+
+
+        
+
+      #make nice looking
+      index_tab_subj <- index_tab_df %>%
+        flextable() %>%
+        # add_header_lines('SPI overall score in 2020 and Pillar Scores.') %>%
+        set_header_labels(values=list(
+                             country="Country",
+                             data_use_pcap_3yr="Academic Data Use per capita - All",
+                             data_papers_3yr_Economics_pcap="Academic Data Use per capita - Economics",
+                             data_papers_3yr_Psychology_pcap="Academic Data Use per capita - Psychology",
+                             data_papers_3yr_Sociology_pcap="Academic Data Use per capita - Sociology",
+                             `data_papers_3yr_Political Science`="Academic Data Use per capita - Political Science",
+                             data_papers_3yr_Medicine_pcap="Academic Data Use per capita - Medicine"
+                                         )) %>%
+          bg(j = c('data_use_pcap_3yr'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Economics_pcap'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks1, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Psychology_pcap'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks2, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Sociology_pcap'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks3, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Political Science_pcap'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks4, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Medicine_pcap'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks5, reverse=TRUE)) 
+
+index_tab_subj %>%
+  autofit()
+```
+
+
+Table. Country Scores on Academic Data Use by Subject of Article.  Regression Adjusted measure. Year 2019.
+```{r subjtab2}
+
+#colors
+
+col_palette <- c("#2ec4b6", "#acece7", "#f1dc76",  "#ffbf69","#ff9f1c"   )
+
+col_palette2 <- c("#2ec4b6",  "#f1dc76", "#ff9f1c" )
+
+#make the table
+index_tab_df <- data_use_subjects_df %>%
+  filter(date==2019) %>%
+  ungroup() %>%
+  select(country, ends_with('_adjusted') ) %>%
+  mutate(across(ends_with('_adjusted'),round,2)) %>%
+  left_join((index_df %>% select(country, data_use_reg_adjusted_3yr))) %>%
+  select(country, data_use_reg_adjusted_3yr, everything()) %>%
+  arrange(desc(data_use_reg_adjusted_3yr))
+
+ #calculate the breaks for the color coding
+        brks <- quantile(index_tab_df$data_use_reg_adjusted_3yr, probs=c(1,2,3,4)/5,na.rm=T)
+        brks <- append(min(index_tab_df$data_use_reg_adjusted_3yr, na.rm=T),brks)
+        brks <- append(brks,max(index_tab_df$data_use_reg_adjusted_3yr, na.rm=T))
+
+        brks1 <- quantile(index_tab_df$data_papers_3yr_Economics_adjusted, probs=c(1,2,3,4)/5,na.rm=T)
+        brks1 <- append(min(index_tab_df$data_papers_3yr_Economics_adjusted, na.rm=T),brks1)
+        brks1 <- append(brks1,max(index_tab_df$data_papers_3yr_Economics_adjusted, na.rm=T))
+
+        brks2 <- quantile(index_tab_df$data_papers_3yr_Psychology_adjusted, probs=c(1,2,3,4)/5,na.rm=T)
+        brks2 <- append(min(index_tab_df$data_papers_3yr_Psychology_adjusted, na.rm=T),brks1)
+        brks2 <- append(brks1,max(index_tab_df$data_papers_3yr_Psychology_adjusted, na.rm=T))
+        
+        brks3 <- quantile(index_tab_df$data_papers_3yr_Sociology_adjusted, probs=c(1,2,3,4)/5,na.rm=T)
+        brks3 <- append(min(index_tab_df$data_papers_3yr_Sociology_adjusted, na.rm=T),brks1)
+        brks3 <- append(brks1,max(index_tab_df$data_papers_3yr_Sociology_adjusted, na.rm=T))
+        
+        brks4 <- quantile(index_tab_df$`data_papers_3yr_Political_Science_adjusted`, probs=c(1,2,3,4)/5,na.rm=T)
+        brks4 <- append(min(index_tab_df$`data_papers_3yr_Political_Science_adjusted`, na.rm=T),brks1)
+        brks4 <- append(brks1,max(index_tab_df$`data_papers_3yr_Political_Science_adjusted`, na.rm=T))
+        
+        brks5 <- quantile(index_tab_df$data_papers_3yr_Medicine_adjusted, probs=c(1,2,3,4)/5,na.rm=T)
+        brks5 <- append(min(index_tab_df$data_papers_3yr_Medicine_adjusted, na.rm=T),brks1)
+        brks5 <- append(brks1,max(index_tab_df$data_papers_3yr_Medicine_adjusted, na.rm=T))
+        
+
+
+        
+
+      #make nice looking
+      index_tab_subj <- index_tab_df %>%
+        flextable() %>%
+        # add_header_lines('SPI overall score in 2020 and Pillar Scores.') %>%
+        set_header_labels(values=list(
+                             country="Country",
+                             data_use_reg_adjusted_3yr="Academic Data Use - Adjusted - All",
+                             data_papers_3yr_Economics_adjusted="Academic Data Use - Adjusted - Economics",
+                             data_papers_3yr_Psychology_adjusted="Academic Data Use - Adjusted - Psychology",
+                             data_papers_3yr_Sociology_adjusted="Academic Data Use - Adjusted - Sociology",
+                             data_papers_3yr_Political_Science_adjusted="Academic Data Use - Adjusted - Political Science",
+                             data_papers_3yr_Medicine_adjusted="Academic Data Use - Adjusted - Medicine"
+                                         )) %>%
+          bg(j = c('data_use_reg_adjusted_3yr'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Economics_adjusted'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks1, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Psychology_adjusted'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks2, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Sociology_adjusted'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks3, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Political_Science_adjusted'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks4, reverse=TRUE)) %>%
+          bg(j = c('data_papers_3yr_Medicine_adjusted'),
+             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks5, reverse=TRUE)) 
+
+index_tab_subj %>%
+  autofit()
+```
+
+## Data Annex
+Table. Relationship between Data Use in Academia and Data Sources from SPI.
+```{r}
+
+modelsummary(source_models,
+             estimate= "{estimate}{stars}",
+             coef_map= c("SPI.INDEX" = "SPI Overall Score",
+                             "SPI.INDEX.PIL1" = "SPI Data Use Score",
+                             "SPI.INDEX.PIL2" = "SPI Data Services Score",
+                             "SPI.INDEX.PIL3" = "SPI Data Products Score",
+                             "SPI.INDEX.PIL4" = "SPI Data Sources Score",
+                             "SPI.INDEX.PIL5" = "SPI Data Infrastructure Score",
+
+                             "SPI.D4.1.1.POPU" = "Population Census Score" ,
+                             "SPI.D4.1.2.AGRI" = "Agriculture Census Score",
+                             "SPI.D4.1.3.BIZZ" = "Business Census Score",
+                             "SPI.D4.1.4.HOUS" = "Household Income/Consumption Survey Score",
+                             "SPI.D4.1.5.AGSVY"= "Agriculture Survey Score" , 
+                             "SPI.D4.1.6.LABR" = "Labor Force Survey Score", 
+                             "SPI.D4.1.7.HLTH" = "Health Survey Score", 
+                             "SPI.D4.1.8.BZSVY" = "Business/Establishment Survey Score",
+                             "SPI.D4.2.3.CRVS" = "Complete Civil Registration and Vital Statistics System Score",
+                             
+                             "Pop.Cen" = "Population Census in past 10 years" ,
+                             "Ag.Cen" = "Agriculture Census  in past 10 years",
+                             "Bizz.Cen" = "Business/Establishment Census in past 10 years",
+                             "House.Svy" = "Household surveys: 2 or more in 10 years",
+                             "Ag.Svy"= "Agriculture Surveys: 2 or more in 10 years" , 
+                             "Labr.Svy" = "Labor Force Surveys: 2 or more in 10 years", 
+                             "Hlth.Svy" = "Health Surveys: 2 or more in 10 years", 
+                             "Bizz.Svy" = "Business/Establishments: 2 or more in 10 years",
+                             "CRVS" = "Complete Civil Registration and Vital Statistics System",
+                             "SPI.D4.3.GEO.first.admin.level"= "Availability of Data at 1st Admin Level (ODIN) Score",
+                             
+                             "log(NY.GDP.MKTP.PP.KD)" = "Log GDP",
+                             "log(NY.GDP.PCAP.PP.KD)" = "Log GDP per capita",
+                             "log(NY.GDP.PCAP.PP.CD^2)" = "Log GDP",
+                             "region"="Region",
+                             "log(SP.POP.TOTL)"="Log Population",
+                             "log(poverty_surveys)" = 'Log # of Poverty Surveys',
+                             "SG.LAW.INDX" = "Women Business and the Law Index Score (scale 1-100)",
+                             "gii"="Gender Inequality Index",
+                             "sigi"="Social Institutions and Gender Index"
+                             ),
+             notes="Data from the World Bank's World Development Indicators (WDI) and SPI.  WDI series codes include NY.GDP.PCAP.PP.KD, SP.POP.TOTL, IQ.SPI.OVRL,IQ.SPI.PIL1,IQ.SPI.PIL2, IQ.SPI.PIL3, IQ.SPI.PIL4, IQ.SPI.PIL5.  Papers include all papers using data years 2000-2020.
+              ***=0.001 level
+              **=0.01 level
+              *=0.05 level
+              +=0.1 level",
+             gof_map = gm,
+             escape = FALSE,
+             fmt = 2
+             )
+
+```
+
 
 ## Amazon Mturk Prompt
 
