@@ -851,7 +851,7 @@ ggplot((nsf_compare ), aes(y=data_papers_estimate, x=IP.JRN.ARTC.SC)) +
 ```
 
 
-## Results
+# Results
 
 ```{r}
 nf_df <- articles_year_df %>%
@@ -1407,7 +1407,7 @@ ggplot(country_scores_aggregate_df, aes(y=data_papers, x=papers, label=iso3c)) +
 
 
 
-Below we show the countries that over or underperform in terms of their GDP per capita in 2020 compared to the number of papers using data per million persons.  This is a way to check for "outliers" in terms of log per capita academic output compared to log per capita GDP.  This analysis is similar to that done in @das2013us.
+Below we show the countries that over or underperform in terms of their GDP per capita and Population in 2020 compared to the number of papers using data.  This is a way to check for "outliers" in terms of academic output compared to income and population.  This analysis is similar to that done in @das2013us.
 
 ```{r}
 
@@ -1418,7 +1418,7 @@ gdp_df_2019 <- country_scores_aggregate_df %>%
   filter(data_papers>0) %>%
   mutate(data_papers_pcap=10^6*data_papers/SP.POP.TOTL)
 
-mod <- lm(log(data_papers_pcap) ~ log(NY.GDP.PCAP.PP.KD),  data=gdp_df_2019) 
+mod <- lm(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL),  data=gdp_df_2019) 
 #summary(mod)
 
 indicator <- 'data_papers'
@@ -1460,15 +1460,19 @@ gdp_overperformers_plot <- gdp_overperformers_plot %>%
   ) +
   xlab("") +
   ylab("Data Use Articles (deviation)") +
-  ggtitle("Over/Under Perfomers - GDP per capita"
+  ggtitle("Over/Under Perfomers - GDP + Population"
           )
 
 
 
 ```
+
+
+```{r eval=FALSE, include=FALSE}
+
 Figure. Over/Underperformers of Academic Output Using Data per Million Persons Compared to GDP per capita.
-```{r}
-p1 <- ggplot(gdp_df_2019, aes(y=data_papers_pcap, x=NY.GDP.PCAP.PP.KD)) +
+
+p1 <- ggplot(gdp_df_2019, aes(y=data_papers, x=NY.GDP.PCAP.PP.KD)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
   scale_x_log10(labels=scales::comma) +
@@ -1490,6 +1494,74 @@ p1
 Figure. Top 15 Over/Underperformers Compared to GDP per capita.
 ```{r}
 gdp_overperformers_plot
+```
+
+## Qualitative versus Quantitative Papers
+
+One may wonder whether countries with low levels of quantitative academic output (using data) compensate by producing more qualitative research.  There does not appear to be evidence that this is the case.  If this were the case, it might be expected that countries that under-produce quantitative articles then over-produce qualitative articles.  The figure below shows the opposite to be the case.  Countries that tend to over-produce quantitative articles also tend to over-produce qualitative articles, conditional on GDP per capita and population.  The figure shows the residuals from the regression of the log number of quantitative, then qualitative, articles on log GDP per capita and population.
+
+Figure. Comparison of the Quantity of Qualitative vs Quantitative Papers. 2000-2020.
+```{r}
+
+#Goal is to check if there is compensation where countries without data produce more qualitative papers.  Doesn't seem to be much of a systematic relationship.  No relationship between SPI and share of 
+
+
+
+#Look at production of quantitative versus qualitative production
+quan_qual_df <- country_scores_aggregate_df %>%
+  mutate(qual_papers=papers-data_papers,
+         qual_gap=100*(qual_papers)/papers) %>%
+  mutate(data_papers_pcap=10^6*data_papers/SP.POP.TOTL) %>%  
+  modelr::add_residuals(mod) %>%
+  filter(qual_papers>0 & data_papers>0)
+
+mod2 <- lm(log(qual_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL),  data=quan_qual_df) 
+
+#add residuals from qual papers
+
+quan_qual_df <- quan_qual_df %>%
+  modelr::add_residuals(mod2,var = 'qual_resid') 
+
+ggplot(quan_qual_df, aes(y=qual_resid, x=resid)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  #scale_x_log10(labels=scales::comma) +
+  #scale_y_log10(labels=scales::comma) +
+  ylab("Qualitative Articles (deviation)") +
+  xlab('Data Use Articles (deviation)') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 1, y = -3,label = eq_plot_txt(quan_qual_df, qual_resid,resid)), hjust=0.2, size=4
+  ) +
+  bbc_style() +
+  labs(
+    subtitle='Residuals from Regression on GDP per capita \n & Income Plotted'
+  )
+
+```
+
+Another test is whether countries with weaker statistical systems tend to produce a higher share of qualitative research. Again, this would be expected if there is compensation, where places with weaker data systems produce more qualitative work to compensate.  This also does not seem to be the case.  There is almost no relationship between SPI overall scores and the share of qualitative papers to total papers produced overall.
+
+Figure. Comparison of Share of Qualitative vs SPI Overall Scores. 2000-2020.
+```{r}
+
+ ggplot(quan_qual_df, aes(y=qual_gap, x=SPI.INDEX)) +
+  geom_point() +
+  geom_text_repel(aes(label=iso3c)) +
+  #scale_x_log10(labels=scales::comma) +
+  #scale_y_log10(labels=scales::comma) +
+  xlab("SPI Overall Score") +
+  ylab('Share of Qualitative Papers to Total # of Papers') +
+  geom_smooth(method = "lm") +
+  geom_richtext(
+    aes(x = 40, y = 20,label = eq_plot_txt(quan_qual_df, qual_gap,SPI.INDEX)), hjust=0.2, size=4
+  ) +
+  bbc_style() +
+  labs(title="") +
+  theme(
+    #axis.title.y = element_blank()
+  )
+
 ```
 
 
@@ -1679,6 +1751,9 @@ map_df <- data_use_df %>%
 
 spi_mapper_quintile('map_df', 'data_use_reg_adjusted_3yr', 'Academic Data Use - Regression Adjusted (2017-2019). Log Scale.')
 ```
+
+
+
 
 # Conclusions
 
