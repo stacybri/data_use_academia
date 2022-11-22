@@ -5,6 +5,8 @@ format:
   revealjs:
     theme: [simple, custom.scss]
     slide-number: true
+    code-tools:
+        source: repo
 title-slide-attributes: 
   data-background-image: ./WB-DEC-Data-horizontal-RGB-high.png
   data-background-size: 30%
@@ -362,7 +364,7 @@ Academia
 ::: {.column width="40%"}
 - Are academics using data produced by country?
 
-- Lacks consistently updated measure of data use
+- Lack consistently updated measure of data use
 
 :::
 
@@ -373,7 +375,10 @@ Academia
 <iframe width="900" height="650" src="./SPI_data_use_mturk_app.html" title="MTurk Documentation"></iframe>
 ```
 
-## Mtruk Training
+
+## Machine Learning Approach
+
+
 
 ## Results
 
