@@ -54,6 +54,7 @@ library(modelsummary)
 library(patchwork)
 library(fst)
 library(aws.s3)
+library(fixest)
 
 dir <- here()
 raw_data <- paste0(dir, "/01_raw_data/")
@@ -91,16 +92,28 @@ tictoc::toc()
 #   as.data.table()
 # tictoc::toc()
 
-correlates_df <- wbstats::wb_data(
-  indicator=c("SP.POP.TOTL","NY.GDP.MKTP.PP.KD",'IQ.SPI.OVRL','NY.GDP.PCAP.PP.KD',
+correlate <- c("SP.POP.TOTL","NY.GDP.MKTP.PP.KD",'IQ.SPI.OVRL','NY.GDP.PCAP.PP.KD',
               'IQ.SPI.PIL1','IQ.SPI.PIL2','IQ.SPI.PIL3',
               'IQ.SPI.PIL4','IQ.SPI.PIL5',
-              'IQ.SCI.OVRL'),
+              'IQ.SCI.OVRL','NV.IND.MANF.ZS', 'NV.AGR.TOTL.ZS','NE.TRD.GNFS.ZS', 'HD.HCI.OVRL', 'HD.HCI.LAYS',
+              'SE.PRM.ENRR','BN.CAB.XOKA.GD.ZS', 'CC.EST', "GE.EST", 'PV.EST', "RQ.EST", "RL.EST", 
+              "VA.EST", "BX.KLT.DINV.WD.GD.ZS", "SI.POV.DDAY", "SI.POV.GINI")
+
+correlates_df <- wbstats::wb_data(
+  indicator=correlate,
   country = 'countries_only',
   start_date=2000,
   end_date=2020
-) %>%
-  left_join(read_csv(paste0(raw_data, "/SPI_Index.csv"))) 
+  ) %>%
+  group_by(iso3c) %>%
+  mutate(across(correlate,
+                ~if_else(is.na(.),1,0),
+                .names="{.col}_imp_tag")) %>% #add tag for data that is imputed
+  fill(correlate, .direction="downup") %>%
+  mutate(WGI.OVL=(CC.EST + GE.EST + PV.EST + RQ.EST + RL.EST + VA.EST)/6
+         )  %>%
+  ungroup()  %>%
+  left_join(read_csv(paste0(raw_data, "/SPI_Index.csv")) %>% select(iso3c, date, starts_with("SPI."))) 
   
 
 countries_list <- colnames(articles_year_df[,12:262])
@@ -193,6 +206,7 @@ country_scores_annual_df <- articles_year_country_df %>%
   left_join(articles_data_use_year_subject_df) %>%
   filter(!is.na(country)) %>%
   rename(date=year) %>%
+  select(-country,) %>%
   left_join(correlates_df) 
 
 
@@ -201,7 +215,7 @@ country_scores_2019_df <- country_scores_annual_df %>%
   filter(date==2019)
 
 country_scores_aggregate_df <- country_scores_annual_df %>%
-  group_by(country, iso3c, region_iso3c, region, admin_region, income_level, lending_type) %>%
+  group_by(iso3c, region, income_level, lending_type) %>%
   summarise(papers=sum(papers, na.rm=T),
             papers_estimate=sum(papers_estimate, na.rm=T),
             data_papers=sum(data_papers, na.rm=T),
@@ -213,11 +227,13 @@ country_scores_aggregate_df <- country_scores_annual_df %>%
             data_papers_Economics=sum(data_papers_Economics, na.rm=T),
             data_papers_Psychology=sum(data_papers_Psychology, na.rm=T),
             data_papers_Sociology =sum(data_papers_Sociology, na.rm=T), 
-            data_papers_Political_Science=sum(`data_papers_Political Science`, na.rm=T),) %>%
+            data_papers_Political_Science=sum(`data_papers_Political Science`, na.rm=T),
+            qual_papers=papers-data_papers) %>%
   mutate(date=2020) %>%
   left_join(correlates_df) %>%
   ungroup() %>%
-  mutate(data_papers_pcap=1000000*data_papers/SP.POP.TOTL)
+  mutate(data_papers_pcap=1000000*data_papers/SP.POP.TOTL) %>%
+  select(country, iso3c, date, region, income_level, lending_type, everything())
   
 
 ncontry_database<-country_scores_aggregate_df %>% filter(papers>0) %>%
@@ -704,10 +720,12 @@ sumstats_tab <- articles_year_df %>%
   transmute(
     `Year of Publication`=year,
     `Published in Journal (1=yes)`=as.numeric(journal==""),
-    Field=group_name
+    Field=group_name,
+    `Data Use (1=yes)`=as.numeric(data_use=="Yes"),
+    `Country Identified (1=yes)`=if_else(nf==1,0,1)
   ) %>%
   group_by(Field) %>%
-  summarise(across(c('Published in Journal (1=yes)'),~round(mean(.),2)),
+  summarise(across(c('Published in Journal (1=yes)','Data Use (1=yes)','Country Identified (1=yes)'),~round(mean(.),2)),
             Articles=n()) %>%
   ungroup() %>%
   mutate(`Share of Articles`=100*round(Articles/sum(Articles),3)) %>%
@@ -940,7 +958,7 @@ ggplot(lorenz,  aes(x=cumulative_pos, y=share) ) +
   bbc_style() +
   geom_text(aes(label=iso3c), check_overlap = TRUE, nudge_y=0.5) +
   xlab('') +
-  ylab('Share of Articles using Data') +
+  ylab("Country's Share of Articles using Data") +
   theme(
     #axis.text.x = element_blank(),
     panel.grid.major.x =  element_blank(),
@@ -971,6 +989,7 @@ Figure. Total Number of articles using data by income
 
 pop_income_df <- correlates_df %>%
   left_join(country_metadata) %>%
+  filter(date==2020) %>%
   group_by(income_level) %>%
   summarise(pop=sum(SP.POP.TOTL, na.rm=T)) %>%
   ungroup() %>%
@@ -1058,18 +1077,24 @@ plt_df <- plt_df %>%
 
 The chart below shows the number of articles using data by region over time.  Note that only papers released prior to April 2020 are included in the S2ORC dataset currently, so in the year 2020 there is a reduced number of papers released.
 
-Figure. Articles Using Data over Time.
+Figure. Articles Using Data per million persons over Time.
 ```{r}
 country_scores_annual_df %>%
-  filter(date<=2020) %>%
+  filter(date<=2019) %>%
   group_by(region, date) %>%
-  summarise(data_papers=sum(data_papers)) %>%
-  ggplot(aes(x=date, y=data_papers, group=region, color=region)) +
+  summarise(data_papers=sum(data_papers, na.rm=T),
+            pop=sum(SP.POP.TOTL, na.rm=T)) %>%
+  mutate(data_papers_pcap=10^6*data_papers/pop) %>%
+  ggplot(aes(x=date, y=data_papers_pcap, group=region, color=region)) +
+  ylab('Papers using data per million persons') +
+  scale_y_continuous(
+    labels=scales::number
+  ) +
   geom_line() +
   bbc_style()
 ```
 
-There is a strong relationship between the number of articles produced using data and GDP per capita, Population, and the SPI Overall score of a country.  Bivariate Regression coefficients from a regression of log number of data use papers on GDP, Population, and the SPI overall score is shown within the figures.  In the case of GDP and population, the regressions are on logged values of GDP or population as the case may be.
+There is a strong relationship between the number of articles produced per capita using data and GDP per capita, Population, and the SPI Overall score of a country.  Bivariate Regression coefficients from a regression of log number of data use papers on GDP, Population, and the SPI overall score is shown within the figures.  In the case of GDP and population, the regressions are on logged values of GDP or population as the case may be.
 
 For GDP per capita, the figures indicate an elasticity of 0.4, meaning that for instance a 10% increase in GDP translate into a 4% increase in academic articles using data.  The elasticity with respect to population is slightly larger than of GDP per capita, with an elasticity of 0.6, and population alone explains 64% of the variation in academic articles using data.
 
@@ -1081,7 +1106,7 @@ Figure. Relationship between Papers using Data and Development Outcomes
 
 #cor(reg_df$NY.GDP.MKTP.PP.KD, reg_df$papers_estimate, use='pairwise.complete.obs')
 reg_df_fixedn <- reg_df %>%
-  filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL) | is.na(SPI.INDEX)))
+  filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL) | is.na(SPI.INDEX))) 
 
 p1 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=NY.GDP.PCAP.PP.KD)) +
   geom_point() +
@@ -1106,15 +1131,13 @@ p2 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SP.POP.TOTL)) +
   scale_x_log10(labels=scales::comma) +
   scale_y_log10(labels=scales::comma) +
   xlab("Population, Total") +
+  ylab('Number of Papers using Data') +
   geom_smooth(method = "lm") +
   geom_richtext(
     aes(x = 50000000, y = 30,label = eq_plot_txt(reg_df_fixedn, log(data_papers),log(SP.POP.TOTL))), hjust=0.2, size=4
   ) +
   bbc_style() +
-  labs(title="Population") +
-  theme(
-    axis.title.y = element_blank()
-  )
+  labs(title="Population") 
 
 p3 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SPI.INDEX)) +
   geom_point() +
@@ -1122,15 +1145,13 @@ p3 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SPI.INDEX)) +
   #scale_x_log10(labels=scales::comma) +
   scale_y_log10(labels=scales::comma) +
   xlab("SPI Overall Score") +
+  ylab('Number of Papers using Data') +
   geom_smooth(method = "lm") +
   geom_richtext(
     aes(x = 40, y = 20,label = eq_plot_txt(reg_df_fixedn, log(data_papers),SPI.INDEX)), hjust=0.2, size=4
   ) +
   bbc_style() +
-  labs(title="SPI Overall Score") +
-  theme(
-    axis.title.y = element_blank()
-  )
+  labs(title="SPI Overall Score") 
 
 
 p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
@@ -1164,19 +1185,19 @@ The table below shows OLS regression coefficients from a regression of the log n
 
 The performance of a country's statistical system also is associated with greater academic output.  Conditional on GDP per capita and population, a ten point increase in SPI overall scores (on a scale of 0-100) translates into a 0.2% increase in academic output.  The SPI pillar most strongly linked to academic output is the pillar on data sources, which cover the availability of recent censuses, surveys, academic data, and geospatial data..
 
-Table. Relationships between Number of Papers Using Data and Statistical Performance Scores
+Table. Cross-Sectional Relationships between Number of Papers Using Data and Statistical Performance Scores
 ```{r}
 
 
 
 models <- list(
-  '(1)'=lm_robust(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD), data=reg_df_fixedn) ,
-  '(2)'=lm_robust(log(data_papers) ~ log(SP.POP.TOTL), data=reg_df_fixedn) ,  
-  '(3)'=lm_robust(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL), data=reg_df_fixedn) ,  
+  '(1)'=feols(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD), data=reg_df_fixedn, se='hetero') ,
+  '(2)'=feols(log(data_papers) ~ log(SP.POP.TOTL), data=reg_df_fixedn, se='hetero') ,  
+  '(3)'=feols(log(data_papers) ~ SPI.INDEX, data=reg_df_fixedn, se='hetero') ,  
   #'(4)'=lm_robust(log(data_papers) ~ SPI.INDEX, data=reg_df_fixedn) ,  
-  '(4)'=lm_robust(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL), data=reg_df_fixedn),
+  '(4)'=feols(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn, se='hetero'),
   #'(6)'=lm_robust(log(data_papers) ~ SPI.INDEX + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 , data=reg_df_fixedn) ,  
-  '(5)'=lm_robust(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn)
+  '(5)'=feols(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL)  , data=reg_df_fixedn, se='hetero')
   # '(6)'=lm_robust(log(data_papers) ~ SPI.D4.1.1.POPU + SPI.D4.1.2.AGRI + SPI.D4.1.3.BIZZ + SPI.D4.1.4.HOUS + SPI.D4.1.5.AGSVY + SPI.D4.1.6.LABR + SPI.D4.1.7.HLTH + SPI.D4.1.8.BZSVY +  SPI.D4.2.3.CRVS + SPI.D4.3.GEO.first.admin.level + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn) 
   )
 
@@ -1196,7 +1217,291 @@ modelsummary(models,
                              "log(poverty_surveys)" = 'Log # of Poverty Surveys',
                              "SG.LAW.INDX" = "Women Business and the Law Index Score (scale 1-100)",
                              "gii"="Gender Inequality Index",
-                             "sigi"="Social Institutions and Gender Index"
+                             "sigi"="Social Institutions and Gender Index",
+                             "NV.IND.MANF.ZS"  = "Manufacturing value added (% of GDP)",
+                              "NV.AGR.TOTL.ZS"= "Agriculture, forestry, fishing value added (% of GDP)",
+                              "BN.CAB.XOKA.GD.ZS"= "Current account balance (% of GDP)",
+                              "HD.HCI.OVRL" = "Human Capital Index (0-1 scale)",
+                              "SE.PRM.ENRR" = "School Enrollment, Primary (% gross)" ,
+                              "NE.TRD.GNFS.ZS" = "Trade (% of GDP)",
+                              "WGI.OVL" = "WGI Index",
+                              "CC.EST" = "WGI: Control of Corruption: Estimate",
+                              "GE.EST" = "WGI: Governance Effectiveness: Estimate",
+                              "PV.EST" = "WGI: Political Stability and Absence of Violence/Terrorism: Estimate",
+                              "RQ.EST" = "WGI: Regulatory Quality: Estimate",
+                              "RL.EST" = "WGI: Rule of Law: Estimate",
+                              "VA.EST" = "WGI: Voice and Accountability: Estimate"
+                             ),
+             notes="Data from the World Bank's World Development Indicators (WDI) and SPI.  WDI series codes include NY.GDP.PCAP.PP.KD, SP.POP.TOTL, IQ.SPI.OVRL,IQ.SPI.PIL1,IQ.SPI.PIL2, IQ.SPI.PIL3, IQ.SPI.PIL4, IQ.SPI.PIL5.  Papers include all papers using data years 2000-2020.
+              ***=0.001 level
+              **=0.01 level
+              *=0.05 level
+              +=0.1 level",
+             #gof_map = gm,
+             escape = FALSE,
+             fmt = 2
+             )
+
+```
+
+
+```{r index_weights}
+
+#Pillar 1 - Overall Weight
+pillar_1 <- 1/5
+#Dimension 1.5: Data Use by International Organizations
+dim_1_5 <- 1
+
+#Dimension 2 - Overall Weight
+pillar_2 <- 1/5
+#Dimension 2.1: Data releases
+dim_2_1 <- 1
+#Dimension 2.2: Online access
+dim_2_2 <- 0
+# Dimension 2.4: Data services
+dim_2_4 <- 0
+
+# Dimension 3 - Overall Weight
+pillar_3 <- 1/5
+# Dimension 3: SDG 1
+dim_3_1 <- 1/16
+# Dimension 3: SDG 2
+dim_3_2 <- 1/16
+# Dimension 3: SDG 3
+dim_3_3 <- 1/16
+# Dimension 3: SDG 4
+dim_3_4 <- 1/16
+# Dimension 3: SDG 5
+dim_3_5 <- 1/16
+# Dimension 3: SDG 6
+dim_3_6 <- 1/16
+# Dimension 3: SDG 7
+dim_3_7 <- 1/16
+# Dimension 3: SDG 8
+dim_3_8 <- 1/16
+# Dimension 3: SDG 9
+dim_3_9 <- 1/16
+# Dimension 3: SDG 10
+dim_3_10 <- 1/16
+# Dimension 3: SDG 11
+dim_3_11 <- 1/16
+# Dimension 3: SDG 12
+dim_3_12 <- 1/16
+# Dimension 3: SDG 13
+dim_3_13 <- 1/16
+# Dimension 3: SDG 15
+dim_3_15 <- 1/16
+# Dimension 3: SDG 16
+dim_3_16 <- 1/16
+# Dimension 3: SDG 17
+dim_3_17 <- 1/16
+
+#Dimension 4 - Overall Weight
+pillar_4 <- 1/5
+# Dimension 4.1: censuses and surveys
+dim_4_1.CEN <- 1/6
+dim_4_1.SVY <- 1/6
+#Dimension 4.2: administrative data
+dim_4_2 <- 1/3
+# Dimension 4.3: geospatial data
+dim_4_3 <- 0
+
+# Dimension 5 - Overall Weight
+pillar_5 <- 1/5
+# Dimension 5.2: Standards and Methods
+dim_5_1 <- 0
+dim_5_2 <- 1
+dim_5_5 <- 0
+
+
+#recalculate index based on the weights
+pillar_total <- pillar_1 + pillar_2 + pillar_3 + pillar_4 + pillar_5
+pillar2_total <- dim_2_1 + dim_2_2 + dim_2_4
+pillar3_total <- 
+  dim_3_1 + 
+  dim_3_2 +
+  dim_3_3 +
+  dim_3_4 +
+  dim_3_5 +
+  dim_3_6 +
+  dim_3_7 +
+  dim_3_8 +
+  dim_3_9 +
+  dim_3_10 +
+  dim_3_11 +
+  dim_3_12 +
+  dim_3_13 +
+  dim_3_15 +
+  dim_3_16 +
+  dim_3_17
+pillar4_total <- dim_4_1.CEN + dim_4_1.SVY + + dim_4_2 + dim_4_3
+pillar5_total <- dim_5_1 + dim_5_2 + dim_5_5
+
+
+```
+
+
+Table. Longitudinal Relationships between Number of Papers Using Data and Statistical Performance Scores
+```{r}
+
+#supplement longitudinal data with sci
+sci_indicators <- c("2.01.01.02.nabase", # National accounts base year
+                    "2.01.03.01.prcpbase", #Consumer price index base year
+                    "2.04.01.01.excncpt", # Balance of payments manual in use
+                    "3.01.04.01.agcen", # Agricultural census
+                    "3.02.01.02.fscov", # Government finance accounting
+                    "3.11.01.01.popcen",   #Population census
+                    "3.11.01.03.popreg", #Vital registration system coverage
+                    "5.04.01.01.exdebt", #External debt reporting status
+                    "5.13.01.01.hlthsurv", #Health survey
+                    "5.14.01.01.povsurv", #Poverty survey
+                    "5.21.01.01.sdds") #Special Data Dissemination Standard)
+
+sci_supplement_df <- wb_data(
+  indicator=sci_indicators,
+  start_date=2004,
+  end_date=2020,
+  country="countries_only"
+)
+
+reg_pan <- country_scores_annual_df %>%
+  left_join(sci_supplement_df) %>%
+  filter(date<=2019) %>%
+   mutate(
+    SPI.INDEX.PIL1.LONG=SPI.DIM1.5.INDEX,
+    SPI.INDEX.PIL2.LONG=`5.21.01.01.sdds`, #supplment with SCI
+    SPI.INDEX.PIL3.LONG=SPI.INDEX.PIL3/100,
+    SPI.DIM4.1.CEN.INDEX.LONG=rowMeans(across(c('3.11.01.01.popcen','3.01.04.01.agcen'))), #separate census and surveys 
+    SPI.INDEX.PIL4.LONG=(
+      (dim_4_1.CEN/pillar4_total)*SPI.DIM4.1.CEN.INDEX.LONG +
+      (dim_4_1.SVY/pillar4_total)*SPI.DIM4.1.SVY.INDEX +
+        (dim_4_2/pillar4_total)*`3.11.01.03.popreg` )
+    ,
+    SPI.DIM5.2.INDEX.LONG=rowMeans(across(c('2.01.01.02.nabase','2.01.03.01.prcpbase','2.04.01.01.excncpt','3.02.01.02.fscov'))),
+    SPI.INDEX.PIL5.LONG=(dim_5_2/pillar5_total)*SPI.DIM5.2.INDEX.LONG ,
+    SPI.INDEX.LONG=(pillar_1/pillar_total)*SPI.INDEX.PIL1.LONG +
+      (pillar_2/pillar_total)*SPI.INDEX.PIL2.LONG +
+      (pillar_3/pillar_total)*SPI.INDEX.PIL3.LONG +
+      (pillar_4/pillar_total)*SPI.INDEX.PIL4.LONG +
+      (pillar_5/pillar_total)*SPI.INDEX.PIL5.LONG 
+    #sum up based on individual dimension weights
+  ) %>% #
+  mutate(across(c('SPI.INDEX.LONG', 'SPI.INDEX.PIL1.LONG','SPI.INDEX.PIL2.LONG','SPI.INDEX.PIL3.LONG','SPI.INDEX.PIL4.LONG','SPI.INDEX.PIL5.LONG'),~100*.)) %>%
+  mutate(year=date) 
+    
+  
+reg_pan_extended <- reg_pan %>%
+  filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL) | is.na(SPI.INDEX.LONG)))
+
+reg_pan_fixed <- reg_pan %>%
+    filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL) | is.na(SPI.INDEX))) 
+
+
+models <- list(
+  '(1)'=feols(log(data_papers_3yr) ~ log(NY.GDP.PCAP.PP.KD) | country + year, data=reg_pan_extended) ,
+  '(2)'=feols(log(data_papers_3yr) ~ log(SP.POP.TOTL) | country + year, data=reg_pan_extended) ,  
+  '(3)'=feols(log(data_papers_3yr) ~ SPI.INDEX | country + year, data=reg_pan_fixed) ,  
+  '(4)'=feols(log(data_papers_3yr) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL)  | country + year, data=reg_pan_fixed),
+  #'(6)'=lm_robust(log(data_papers) ~ SPI.INDEX + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 , data=reg_pan_fixed) ,  
+  '(5)'=feols(log(data_papers_3yr) ~ SPI.INDEX.LONG + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country  + year, data=reg_pan_extended),
+  '(6)'=feols(log(data_papers_3yr) ~ SPI.INDEX.PIL1.LONG + SPI.INDEX.PIL2.LONG + SPI.INDEX.PIL3.LONG + SPI.INDEX.PIL4.LONG + SPI.INDEX.PIL5.LONG + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country  + year, data=reg_pan_extended)
+  )
+
+modelsummary(models,
+             estimate= "{estimate}{stars}",
+             coef_rename = c("SPI.INDEX" = "SPI Overall Score",
+                             "SPI.INDEX.PIL1" = "SPI Data Use Score",
+                             "SPI.INDEX.PIL2" = "SPI Data Services Score",
+                             "SPI.INDEX.PIL3" = "SPI Data Products Score",
+                             "SPI.INDEX.PIL4" = "SPI Data Sources Score",
+                             "SPI.INDEX.PIL5" = "SPI Data Infrastructure Score",
+                             "SPI.INDEX.LONG" = "SPI Overall Score (Extended Series)",
+                             "SPI.INDEX.PIL1.LONG" = "SPI Data Use Score (Extended Series)",
+                             "SPI.INDEX.PIL2.LONG" = "SPI Data Services Score (Extended Series)",
+                             "SPI.INDEX.PIL3.LONG" = "SPI Data Products Score (Extended Series)",
+                             "SPI.INDEX.PIL4.LONG" = "SPI Data Sources Score (Extended Series)",
+                             "SPI.INDEX.PIL5.LONG" = "SPI Data Infrastructure Score (Extended Series)",
+                             "log(NY.GDP.MKTP.PP.KD)" = "Log GDP",
+                             "log(NY.GDP.PCAP.PP.KD)" = "Log GDP per capita",
+                             "log(NY.GDP.PCAP.PP.CD^2)" = "Log GDP",
+                             "region"="Region",
+                             "log(SP.POP.TOTL)"="Log Population",
+                             "log(poverty_surveys)" = 'Log # of Poverty Surveys',
+                             "SG.LAW.INDX" = "Women Business and the Law Index Score (scale 1-100)",
+                             "gii"="Gender Inequality Index",
+                             "sigi"="Social Institutions and Gender Index",
+                             "NV.IND.MANF.ZS"  = "Manufacturing value added (% of GDP)",
+                              "NV.AGR.TOTL.ZS"= "Agriculture, forestry, fishing value added (% of GDP)",
+                              "BN.CAB.XOKA.GD.ZS"= "Current account balance (% of GDP)",
+                              "HD.HCI.OVRL" = "Human Capital Index (0-1 scale)",
+                              "SE.PRM.ENRR" = "School Enrollment, Primary (% gross)" ,
+                              "NE.TRD.GNFS.ZS" = "Trade (% of GDP)",
+                              "WGI.OVL" = "WGI Index",
+                              "CC.EST" = "WGI: Control of Corruption: Estimate",
+                              "GE.EST" = "WGI: Governance Effectiveness: Estimate",
+                              "PV.EST" = "WGI: Political Stability and Absence of Violence/Terrorism: Estimate",
+                              "RQ.EST" = "WGI: Regulatory Quality: Estimate",
+                              "RL.EST" = "WGI: Rule of Law: Estimate",
+                              "VA.EST" = "WGI: Voice and Accountability: Estimate"
+                             ),
+             notes="Data from the World Bank's World Development Indicators (WDI) and SPI.  WDI series codes include NY.GDP.PCAP.PP.KD, SP.POP.TOTL, IQ.SPI.OVRL,IQ.SPI.PIL1,IQ.SPI.PIL2, IQ.SPI.PIL3, IQ.SPI.PIL4, IQ.SPI.PIL5.  Papers include all papers using data years 2004-2019. SPI Extended Series data supplements SPI data with data from Statistical Capacity Indicator (SCI) to extend series back to 2004.
+              ***=0.001 level
+              **=0.01 level
+              *=0.05 level
+              +=0.1 level",
+             #gof_map = gm,
+             escape = FALSE,
+             fmt = 2
+             )
+
+```
+
+```{r eval=FALSE, include=FALSE}
+
+#Qual papers.  Same analysis
+
+
+models <- list(
+  '(1)'=lm_robust(log(qual_papers) ~ log(NY.GDP.PCAP.PP.KD), data=(reg_df_fixedn %>% filter(qual_papers>0))) ,
+  '(2)'=lm_robust(log(qual_papers) ~ log(SP.POP.TOTL), data=reg_df_fixedn) ,  
+  '(3)'=lm_robust(log(qual_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL), data=(reg_df_fixedn %>% filter(qual_papers>0))) ,  
+  #'(4)'=lm_robust(log(data_papers) ~ SPI.INDEX, data=reg_df_fixedn) ,  
+  '(4)'=lm_robust(log(qual_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL), data=(reg_df_fixedn %>% filter(qual_papers>0))),
+  #'(6)'=lm_robust(log(data_papers) ~ SPI.INDEX + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 , data=reg_df_fixedn) ,  
+  '(5)'=lm_robust(log(qual_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=(reg_df_fixedn %>% filter(qual_papers>0)))
+  # '(6)'=lm_robust(log(data_papers) ~ SPI.D4.1.1.POPU + SPI.D4.1.2.AGRI + SPI.D4.1.3.BIZZ + SPI.D4.1.4.HOUS + SPI.D4.1.5.AGSVY + SPI.D4.1.6.LABR + SPI.D4.1.7.HLTH + SPI.D4.1.8.BZSVY +  SPI.D4.2.3.CRVS + SPI.D4.3.GEO.first.admin.level + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn) 
+  )
+
+modelsummary(models,
+             estimate= "{estimate}{stars}",
+             coef_rename = c("SPI.INDEX" = "SPI Overall Score",
+                             "SPI.INDEX.PIL1" = "SPI Data Use Score",
+                             "SPI.INDEX.PIL2" = "SPI Data Services Score",
+                             "SPI.INDEX.PIL3" = "SPI Data Products Score",
+                             "SPI.INDEX.PIL4" = "SPI Data Sources Score",
+                             "SPI.INDEX.PIL5" = "SPI Data Infrastructure Score",
+                             "log(NY.GDP.MKTP.PP.KD)" = "Log GDP",
+                             "log(NY.GDP.PCAP.PP.KD)" = "Log GDP per capita",
+                             "log(NY.GDP.PCAP.PP.CD^2)" = "Log GDP",
+                             "region"="Region",
+                             "log(SP.POP.TOTL)"="Log Population",
+                             "log(poverty_surveys)" = 'Log # of Poverty Surveys',
+                             "SG.LAW.INDX" = "Women Business and the Law Index Score (scale 1-100)",
+                             "gii"="Gender Inequality Index",
+                             "sigi"="Social Institutions and Gender Index",
+                             "NV.IND.MANF.ZS"  = "Manufacturing value added (% of GDP)",
+                              "NV.AGR.TOTL.ZS"= "Agriculture, forestry, fishing value added (% of GDP)",
+                              "BN.CAB.XOKA.GD.ZS"= "Current account balance (% of GDP)",
+                              "HD.HCI.OVRL" = "Human Capital Index (0-1 scale)",
+                              "SE.PRM.ENRR" = "School Enrollment, Primary (% gross)" ,
+                              "NE.TRD.GNFS.ZS" = "Trade (% of GDP)",
+                              "WGI.OVL" = "WGI Index",
+                              "CC.EST" = "WGI: Control of Corruption: Estimate",
+                              "GE.EST" = "WGI: Governance Effectiveness: Estimate",
+                              "PV.EST" = "WGI: Political Stability and Absence of Violence/Terrorism: Estimate",
+                              "RQ.EST" = "WGI: Regulatory Quality: Estimate",
+                              "RL.EST" = "WGI: Rule of Law: Estimate",
+                              "VA.EST" = "WGI: Voice and Accountability: Estimate"
                              ),
              notes="Data from the World Bank's World Development Indicators (WDI) and SPI.  WDI series codes include NY.GDP.PCAP.PP.KD, SP.POP.TOTL, IQ.SPI.OVRL,IQ.SPI.PIL1,IQ.SPI.PIL2, IQ.SPI.PIL3, IQ.SPI.PIL4, IQ.SPI.PIL5.  Papers include all papers using data years 2000-2020.
               ***=0.001 level
@@ -1274,7 +1579,20 @@ modelplot(source_models,
                              "House.Svy" = "Household surveys: 2 or more in 10 years",
                              "Bizz.Cen" = "Business/Establishment Census in past 10 years",
                                "Ag.Cen" = "Agriculture Census  in past 10 years",
-                            "Pop.Cen" = "Population Census in past 10 years" 
+                            "Pop.Cen" = "Population Census in past 10 years" ,
+                            "NV.IND.MANF.ZS"  = "Manufacturing value added (% of GDP)",
+                              "NV.AGR.TOTL.ZS"= "Agriculture, forestry, fishing value added (% of GDP)",
+                              "BN.CAB.XOKA.GD.ZS"= "Current account balance (% of GDP)",
+                              "HD.HCI.OVRL" = "Human Capital Index (0-1 scale)",
+                              "SE.PRM.ENRR" = "School Enrollment, Primary (% gross)" ,
+                              "NE.TRD.GNFS.ZS" = "Trade (% of GDP)",
+                              "WGI.OVL" = "WGI Index",
+                              "CC.EST" = "WGI: Control of Corruption: Estimate",
+                              "GE.EST" = "WGI: Governance Effectiveness: Estimate",
+                              "PV.EST" = "WGI: Political Stability and Absence of Violence/Terrorism: Estimate",
+                              "RQ.EST" = "WGI: Regulatory Quality: Estimate",
+                              "RL.EST" = "WGI: Rule of Law: Estimate",
+                              "VA.EST" = "WGI: Voice and Accountability: Estimate"
                              
 
                              ),
@@ -1340,51 +1658,85 @@ modelplot(source_models,
 
 
 
-```{r fixest, eval=FALSE, include=FALSE}
+```{r panelplot}
 
-reg_df_annual_fixedn <-  country_scores_annual_df %>%
-  filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL))) %>%
-  filter(data_papers>0)
+reg_pan_extended <- reg_pan_extended %>%
+  mutate(
+    Pop.Cen=as.numeric(`3.11.01.01.popcen`==1),
+    Ag.Cen=as.numeric(`3.01.04.01.agcen`==1),
+    House.Svy=as.numeric(SPI.D4.1.4.HOUS>=0.5),
+    Ag.Svy=as.numeric(SPI.D4.1.5.AGSVY>=0.5),
+    Labr.Svy=as.numeric(SPI.D4.1.6.LABR>=0.5),
+    Hlth.Svy=as.numeric(SPI.D4.1.7.HLTH>=0.5),
+    Bizz.Svy=as.numeric(SPI.D4.1.8.BZSVY>=0.5),
+    CRVS=as.numeric(`3.11.01.03.popreg`==1)
+  ) 
 
-models <- list(
-  '(1)'=fixest::feols(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) | iso3c + date, data=reg_df_annual_fixedn) ,
-  '(2)'=fixest::feols(log(data_papers) ~ log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn) ,  
-  '(3)'=fixest::feols(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn) ,  
-  '(4)'=fixest::feols(log(data_papers) ~ SPI.INDEX | iso3c + date, data=reg_df_annual_fixedn) ,  
-  '(5)'=fixest::feols(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn),
-  '(6)'=fixest::feols(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 | iso3c + date, data=reg_df_annual_fixedn) ,  
-  '(7)'=fixest::feols(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn),  
-  '(8)'=fixest::feols(log(data_papers) ~ IQ.SCI.OVRL | iso3c + date, data=reg_df_annual_fixedn) ,  
-  '(9)'=fixest::feols(log(data_papers) ~ IQ.SCI.OVRL + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | iso3c + date, data=reg_df_annual_fixedn)
-
+source_models <- list(
+  '(1)'=feols(log(data_papers_3yr) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) + Pop.Cen | country + year  , data=reg_pan_extended),
+  '(2)'=feols(log(data_papers_3yr) ~ Ag.Cen + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
+  '(4)'=feols(log(data_papers_3yr) ~  House.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
+  '(5)'=feols(log(data_papers_3yr) ~  Ag.Svy + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
+  '(6)'=feols(log(data_papers_3yr) ~  Labr.Svy + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
+  '(7)'=feols(log(data_papers_3yr) ~ Hlth.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
+  '(8)'=feols(log(data_papers_3yr) ~  Bizz.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
+  '(9)'=feols(log(data_papers_3yr) ~  CRVS  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended)
   )
 
-modelsummary(models,
-             estimate= "{estimate}{stars}",
-             coef_rename = c("SPI.INDEX" = "SPI Overall Score",
+
+
+modelplot(source_models,
+          coef_map= c("SPI.INDEX" = "SPI Overall Score",
                              "SPI.INDEX.PIL1" = "SPI Data Use Score",
                              "SPI.INDEX.PIL2" = "SPI Data Services Score",
                              "SPI.INDEX.PIL3" = "SPI Data Products Score",
                              "SPI.INDEX.PIL4" = "SPI Data Sources Score",
                              "SPI.INDEX.PIL5" = "SPI Data Infrastructure Score",
-                             "log(NY.GDP.MKTP.PP.KD)" = "Log GDP",
-                             "log(NY.GDP.PCAP.PP.KD)" = "Log GDP per capita",
-                             "log(NY.GDP.PCAP.PP.CD^2)" = "Log GDP",
-                             "region"="Region",
-                             "log(SP.POP.TOTL)"="Log Population",
-                             "log(poverty_surveys)" = 'Log # of Poverty Surveys',
-                             "SG.LAW.INDX" = "Women Business and the Law Index Score (scale 1-100)",
-                             "gii"="Gender Inequality Index",
-                             "sigi"="Social Institutions and Gender Index"
+
+                             "SPI.D4.1.1.POPU" = "Population Census Score" ,
+                             "SPI.D4.1.2.AGRI" = "Agriculture Census Score",
+                             "SPI.D4.1.3.BIZZ" = "Business Census Score",
+                             "SPI.D4.1.4.HOUS" = "Household Income/Consumption Survey Score",
+                             "SPI.D4.1.5.AGSVY"= "Agriculture Survey Score" , 
+                             "SPI.D4.1.6.LABR" = "Labor Force Survey Score", 
+                             "SPI.D4.1.7.HLTH" = "Health Survey Score", 
+                             "SPI.D4.1.8.BZSVY" = "Business/Establishment Survey Score",
+                             "SPI.D4.2.3.CRVS" = "Complete Civil Registration and Vital Statistics System Score",
+                             
+                             "SPI.D4.3.GEO.first.admin.level"= "Availability of Data at 1st Admin Level (ODIN) Score",
+                             "CRVS" = "Complete Civil Registration and Vital Statistics System",
+                              "Bizz.Svy" = "Business/Establishments: 2 or more in 10 years",
+                             "Hlth.Svy" = "Health Surveys: 2 or more in 10 years", 
+                               "Labr.Svy" = "Labor Force Surveys: 2 or more in 10 years", 
+                               "Ag.Svy"= "Agriculture Surveys: 2 or more in 10 years" , 
+                             "House.Svy" = "Household surveys: 2 or more in 10 years",
+                             "Bizz.Cen" = "Business/Establishment Census in past 10 years",
+                               "Ag.Cen" = "Agriculture Census  in past 10 years",
+                            "Pop.Cen" = "Population Census in past 10 years" ,
+                            "NV.IND.MANF.ZS"  = "Manufacturing value added (% of GDP)",
+                              "NV.AGR.TOTL.ZS"= "Agriculture, forestry, fishing value added (% of GDP)",
+                              "BN.CAB.XOKA.GD.ZS"= "Current account balance (% of GDP)",
+                              "HD.HCI.OVRL" = "Human Capital Index (0-1 scale)",
+                              "SE.PRM.ENRR" = "School Enrollment, Primary (% gross)" ,
+                              "NE.TRD.GNFS.ZS" = "Trade (% of GDP)",
+                              "WGI.OVL" = "WGI Index",
+                              "CC.EST" = "WGI: Control of Corruption: Estimate",
+                              "GE.EST" = "WGI: Governance Effectiveness: Estimate",
+                              "PV.EST" = "WGI: Political Stability and Absence of Violence/Terrorism: Estimate",
+                              "RQ.EST" = "WGI: Regulatory Quality: Estimate",
+                              "RL.EST" = "WGI: Rule of Law: Estimate",
+                              "VA.EST" = "WGI: Voice and Accountability: Estimate"
+                             
+
                              ),
-             notes="",
-             #gof_map = gm,
-             escape = FALSE,
-             fmt = 2
-             )
+          ) +
+  labs(subtitle='Partial regression coefficients conditional on \n log GDP per capita, log population, and \n country and year fixed effects.',
+      caption="Data from the World Bank's World Development Indicators (WDI) and SPI. \n Papers include all papers using data years 2000-2020. \n Confidence Intervals at 95% significance level") +
+  theme(
+    legend.position = 'none'
+  )
+
 ```
-
-
 <!-- Figure. Comparison between number of articles published about a country and the number of articles about a country *using data*.   -->
 
 ```{r eval=FALSE, include=FALSE}
@@ -1407,94 +1759,11 @@ ggplot(country_scores_aggregate_df, aes(y=data_papers, x=papers, label=iso3c)) +
 
 
 
-Below we show the countries that over or underperform in terms of their GDP per capita and Population in 2020 compared to the number of papers using data.  This is a way to check for "outliers" in terms of academic output compared to income and population.  This analysis is similar to that done in @das2013us.
-
-```{r}
 
 
 
 
-gdp_df_2019 <- country_scores_aggregate_df %>%
-  filter(data_papers>0) %>%
-  mutate(data_papers_pcap=10^6*data_papers/SP.POP.TOTL)
 
-mod <- lm(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL),  data=gdp_df_2019) 
-#summary(mod)
-
-indicator <- 'data_papers'
-
-form <- paste(indicator, " ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL)", sep="")
-
-
-gdp_overperformers_df <- gdp_df_2019 %>%
-  modelr::add_residuals(mod) %>%
-  arrange(-resid) %>%
-  head(15)
-
-gdp_underperformers_df <- gdp_df_2019 %>%
-  modelr::add_residuals(mod) %>%
-  arrange(resid) %>%
-  head(15)
-
-
-gdp_overperformers_plot <-  gdp_overperformers_df %>%
-  bind_rows(gdp_underperformers_df) %>%
-  arrange(resid) 
-
-gdp_overperformers_plot <- gdp_overperformers_plot %>%
-  mutate(country=factor(country, levels=unique(gdp_overperformers_plot$country)),
-         group=if_else(resid>=0, 'above','below')) %>%
-  ggplot(aes(x=country, y=resid, color=group)) +
-  geom_segment( aes(x=country ,xend=country, y=0, yend=resid), color="black") +
-  geom_point(size=3) +
-  scale_y_continuous(labels=scales::comma) +
-  scale_color_manual(name="GDP",
-                     labels = c("Over-performers", "Under-performers"),
-                     values = c('above'="#1A9850", 'below'="#D73027")) +
-  coord_flip() +
-  bbc_style() +
-  theme(
-    panel.grid.minor.y = element_blank(),
-    panel.grid.major.y = element_blank(),
-    legend.position = 'bottom'
-  ) +
-  xlab("") +
-  ylab("Data Use Articles (deviation)") +
-  ggtitle("Over/Under Perfomers - GDP + Population"
-          )
-
-
-
-```
-
-
-```{r eval=FALSE, include=FALSE}
-
-Figure. Over/Underperformers of Academic Output Using Data per Million Persons Compared to GDP per capita.
-
-p1 <- ggplot(gdp_df_2019, aes(y=data_papers, x=NY.GDP.PCAP.PP.KD)) +
-  geom_point() +
-  geom_text_repel(aes(label=iso3c)) +
-  scale_x_log10(labels=scales::comma) +
-  scale_y_log10(labels=scales::comma) +
-  xlab("GDP per capita, PPP (constant 2017 international $)") +
-  ylab('Number of Papers using Data per million persons') +
-  geom_smooth(method = "lm") +
-  geom_richtext(
-    aes(x = 40000, y = 30,label = eq_plot_txt(gdp_df_2019, log(data_papers_pcap),log(NY.GDP.PCAP.PP.KD))), hjust=0.2, size=4
-  ) +
-  bbc_style() +
-  labs(
-    title='Outliers in GDP per capita'
-  )
-
-p1 
-```
-
-Figure. Top 15 Over/Underperformers Compared to GDP per capita.
-```{r}
-gdp_overperformers_plot
-```
 
 ## Qualitative versus Quantitative Papers
 
@@ -1504,13 +1773,13 @@ Figure. Comparison of the Quantity of Qualitative vs Quantitative Papers. 2000-2
 ```{r}
 
 #Goal is to check if there is compensation where countries without data produce more qualitative papers.  Doesn't seem to be much of a systematic relationship.  No relationship between SPI and share of 
+mod <- lm(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL),  data=country_scores_aggregate_df %>% filter(data_papers>0)) 
 
 
 
 #Look at production of quantitative versus qualitative production
 quan_qual_df <- country_scores_aggregate_df %>%
-  mutate(qual_papers=papers-data_papers,
-         qual_gap=100*(qual_papers)/papers) %>%
+  mutate(qual_gap=100*(qual_papers)/papers) %>%
   mutate(data_papers_pcap=10^6*data_papers/SP.POP.TOTL) %>%  
   modelr::add_residuals(mod) %>%
   filter(qual_papers>0 & data_papers>0)
@@ -1669,7 +1938,27 @@ data_use_df <- data_use_df %>%
 
 ```
 
-The table below is sorted based on the regression adjusted measure of data use.  
+The figure below shows the correlations between the three measures of data use described above: a per capita measure, a regression adjusted measure, and the share of articles using data.  In the case of the per capita measure, the correlations shown are for the log number of articles per capita.  All three measures are correlated with one another positively.  The per capita measure and the regression adjusted measure have a pearson correlation of around 0.6, while the correlation with the share of papers using data for both the per capita and regression adjusted measure is close to 0.4. 
+
+Figure. Country Scores under alternative scoring approaches
+```{r}
+
+ggally2_df <- data_use_df %>%
+  filter(date==2019) %>%
+  ungroup() %>%
+  select( data_use_pcap_3yr, data_use_reg_adjusted_3yr, data_use_ratio_3yr) %>%
+  mutate(
+         data_use_pcap_3yr=log10(data_use_pcap_3yr)) %>%
+  filter(!( is.na(data_use_pcap_3yr) | is.na(data_use_reg_adjusted_3yr) |  is.na(data_use_ratio_3yr)))
+
+ggpairs(ggally2_df,
+        columnLabels=c( "Log Articles Per Capita", "Regression Adjusted", "Share using data")) +
+  theme_few() +
+  labs(subtitle="Measures use 3 year moving average of articles using data")
+
+```
+
+
 
 Countries shaded in dark orange are the lowest performing, countries in dark green are the highest performing. Countries are grouped into five groups:
  
@@ -1679,6 +1968,91 @@ Countries shaded in dark orange are the lowest performing, countries in dark gre
 * **3rd Quintile**: Countries in the 3rd quintile, or those between the 40th and 60th percentile, are classified in this group.  Shading in <span style="color:#f1dc76">yellow</span>.  
 * **2nd Quintile**: Countries in the 2nd quintile, or those above the 20th percentile but below the 40th percentile, are in this group.  Shading in <span style="color:#ffbf69">light orange</span>.  
 * **Bottom 20%**: Countries in the bottom 20% are classified in this group.  Shading in <span style="color:#ff9f1c">dark orange </span>.  
+
+
+Figure. Number of Articles using Data by Country (2000-2020)
+```{r}
+
+map_df <- data_use_df %>%
+  filter(date==2019) %>%
+  ungroup() 
+
+spi_mapper_quintile('map_df', 'data_use_reg_adjusted_3yr', 'Academic Data Use - Regression Adjusted (2017-2019). Log Scale.')
+```
+
+
+Below we show the countries that over or underperform in terms of their GDP per capita and Population in 2020 compared to the number of papers using data.  Only countries with more than 1 million persons will be included.  This is a way to check for "outliers" in terms of academic output compared to income and population.  This analysis is similar to that done in @das2013us.
+
+```{r}
+
+
+
+
+
+
+
+gdp_overperformers_df <- map_df %>%
+  filter(SP.POP.TOTL>10^6) %>%
+  arrange(-data_use_reg_adjusted_3yr) %>%
+  head(15)
+
+gdp_underperformers_df <- map_df %>%
+  filter(SP.POP.TOTL>10^6) %>%
+  arrange(data_use_reg_adjusted_3yr) %>%
+  head(15)
+
+
+gdp_overperformers_plot <-  gdp_overperformers_df %>%
+  bind_rows(gdp_underperformers_df) %>%
+  arrange(data_use_reg_adjusted_3yr) 
+
+gdp_overperformers_plot <- gdp_overperformers_plot %>%
+  mutate(country=factor(country, levels=unique(gdp_overperformers_plot$country)),
+         group=if_else(data_use_reg_adjusted_3yr>=0, 'above','below')) %>%
+  ggplot(aes(x=country, y=data_use_reg_adjusted_3yr, color=group)) +
+  geom_segment( aes(x=country ,xend=country, y=0, yend=data_use_reg_adjusted_3yr), color="black") +
+  geom_point(size=3) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_color_manual(name="GDP",
+                     labels = c("Over-performers", "Under-performers"),
+                     values = c('above'="#1A9850", 'below'="#D73027")) +
+  coord_flip() +
+  bbc_style() +
+  theme(
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = 'bottom'
+  ) +
+  xlab("") +
+  ylab("Data Use Articles (deviation)") +
+  ggtitle("Over/Under Perfomers - GDP + Population"
+          )
+gdp_overperformers_plot
+```
+
+
+# Conclusions
+
+This paper suggests a methodology for measuring data use by academia by classifying academic articles using natural language processing tools.  The NLP model can classify whether articles do or do not use data with 87% accuracy and match human rated classifications of academic output using data per country with a correlation of around 0.99. These measures also correlate strongly with alternative measures in the literature.  
+
+Applying the NLP model to a corpus of around 1 million academic articles a few key findings are revealed.  High income countries produce a disproportionate share of academic output using data compared to their population.  High income countries produce around 50% of all articles, while making up only 17% of the world population.  Low income countries produce only 5% of academic output using data, while making  up 1/3rd of the population.  Second, GDP per capita and population are strong predictors of academic output, explaining around 75% of the variation between countries.  Finally, statistical performance is a strong predictor of academic output using data, particularly in the case of data sources.  Finally, a set of annual measures of academic output for 216 countries are produced.  
+
+With hundreds of millions spent on statistical capacity measures, the approach in this paper offers one metric for judging the effectiveness of these investments. 
+
+Next steps:   
+
+  - Include final 10 million or so articles   
+  - Further improve model performance   
+  - Release as set of indicators for SPI
+
+
+
+# References
+
+<div id="refs"></div>
+
+
+# Appendix
 
 
 
@@ -1742,41 +2116,6 @@ index_tab %>%
   autofit()
 ```
 
-Figure. Number of Articles using Data by Country (2000-2020)
-```{r}
-
-map_df <- data_use_df %>%
-  filter(date==2019) %>%
-  ungroup() 
-
-spi_mapper_quintile('map_df', 'data_use_reg_adjusted_3yr', 'Academic Data Use - Regression Adjusted (2017-2019). Log Scale.')
-```
-
-
-
-
-# Conclusions
-
-This paper suggests a methodology for measuring data use by academia by classifying academic articles using natural language processing tools.  The NLP model can classify whether articles do or do not use data with 87% accuracy and match human rated classifications of academic output using data per country with a correlation of around 0.99. These measures also correlate strongly with alternative measures in the literature.  
-
-Applying the NLP model to a corpus of around 1 million academic articles a few key findings are revealed.  High income countries produce a disproportionate share of academic output using data compared to their population.  High income countries produce around 50% of all articles, while making up only 17% of the world population.  Low income countries produce only 5% of academic output using data, while making  up 1/3rd of the population.  Second, GDP per capita and population are strong predictors of academic output, explaining around 75% of the variation between countries.  Finally, statistical performance is a strong predictor of academic output using data, particularly in the case of data sources.  Finally, a set of annual measures of academic output for 216 countries are produced.  
-
-With hundreds of millions spent on statistical capacity measures, the approach in this paper offers one metric for judging the effectiveness of these investments. 
-
-Next steps:   
-
-  - Include final 10 million or so articles   
-  - Further improve model performance   
-  - Release as set of indicators for SPI
-
-
-
-# References
-
-<div id="refs"></div>
-
-
-# Appendix
 
 ## Machine Learning Approach
 
