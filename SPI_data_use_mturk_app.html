@@ -1,0 +1,444 @@
+<script src="https://assets.crowd.aws/crowd-html-elements.js"></script>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/qtip2/3.0.3/basic/jquery.qtip.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/qtip2/3.0.3/basic/jquery.qtip.min.css">
+
+<style type="text/css" media="screen">
+
+  table{
+  border-collapse:collapse;
+  border:1px solid #FF0000;
+  }
+  
+  table td{
+  border:1px solid #FF0000;
+  }
+  </style>
+
+<script type="text/javascript">
+    $(document).ready(function() {
+        $('[qtip!=""]').qtip({
+          content: {
+            attr: 'qtip'
+          }
+        });
+      });
+    </script>
+
+<style>
+  h3 {
+    margin-top: 0;
+  }
+  
+  crowd-card {
+    width: 100%;
+  }
+  
+  .card {
+    margin: 10px;
+  }
+  
+  .left {
+    width: 70%;
+    margin-right: 10px;
+    display: inline-block;
+    height: 800px;
+  }
+  
+  .right {
+    width: 20%;
+    height: 800px;
+    display: inline-block;
+    vertical-align: top;
+  }
+
+
+</style>
+
+<crowd-form>
+
+  <full-instructions>
+    Each of these documents is an academic article. The goal of this study is to measure whether a specific academic article is using data and from which country the data came.  <br>
+    
+    There are two classification tasks in this exercise: 
+    <br> (1) identifying whether an academic article is using data from a country 
+    <br> (2) identifying from which country that data came.
+    
+    <br> For task 1, we are looking specifically at the use of data. Data is any information that has been collected, observed, generated or created to produce research findings.  
+    As an example, a study that reports findings or analysis using a survey data, uses data. Some clues to indicate that a study does use data includes whether a survey or census is described, a statistical model estimated, or a table or means or summary statistics is reported.
+    
+    <br> After an article is classified as using data, please note the type of data used.  The options are population or business census, survey data, administrative data, geospatial data, private sector data, and other data.  If no data is used, then mark "Not applicable".  In cases where multiple data types are used, please hold the cntl key and click multiple options.
+    
+    <br> For task 2, we are looking at the country or countries that are studied in the article.  In some cases, no country may be applicable.  For instance, if the research is theoretical and has no specific country application.  In some cases, the research article may involve multiple countries.  In these cases, please hold down the cntl key and select all countries that are discussed in the paper.
+    
+    We expect between 10 and 35 percent of all articles to use data.
+
+  </full-instructions>
+  
+  <short-instructions style='height: 200px;'>
+    Each of these documents is an academic article. The goal of this study is to measure whether a specific academic article is using data and from which country the data came.  <br>
+    
+    There are two classification tasks in this exercise: 
+    <br> (1) identifying whether an academic article is using data from a country 
+    <br> (2) identifying from which country that data came.
+    
+    <br> For task 1, we are looking specifically at the use of data. Data is any information that has been collected, observed, generated or created to produce research findings.  
+    As an example, a study that reports findings or analysis using a survey data, uses data. Some clues to indicate that a study does use data includes whether a survey or census is described, a statistical model estimated, or a table or means or summary statistics is reported.
+    
+    <br> After an article is classified as using data, please note the type of data used.  The options are population or business census, survey data, administrative data, geospatial data, private sector data, and other data.  If no data is used, then mark "Not applicable".  In cases where multiple data types are used, please hold the cntl key and click multiple options.
+    
+    <br> For task 2, we are looking at the country or countries that are studied in the article.  In some cases, no country may be applicable.  For instance, if the research is theoretical and has no specific country application.  In some cases, the research article may involve multiple countries.  In these cases, please hold down the cntl key and select all countries that are discussed in the paper.
+    
+    <br> <bold> We expect between 10 and 35 percent of all articles to use data. </bold>
+  </short-instructions>
+  
+
+    <div class="left">
+        <!-- <iframe src="https://gaml.uis.unesco.org/wp-content/uploads/sites/2/2021/03/Azevedo-et-al-2021_Will-Every-Child-Be-Able-to-Read-by-2030.pdf" style="width: 100%; height: 600px;"  ></iframe> -->
+        <h1 style="color: red">Please carefully read the instructions above</h1>
+        
+        
+
+        <h1> Article Information</h1>
+        
+        <h2> Title: </h2> <p>Germ line mutations of hMSH2 and hMLH1 genes in Japanese families with hereditary nonpolyposis colorectal cancer (HNPCC): usefulness of DNA analysis for screening and diagnosis of HNPCC patients </p>
+
+        <h2> Abstract (if available): </h2> <p> Mutations in hMSH2 and hMLH1 genes were analyzed in patients from 11 Japanese families that had been diagnosed as carrying hereditary nonpolyposis colorectal cancer (HNPCC) by clinical examination. Germ line mutations of hMSH2 gene were identified in 5 independent families in which colorectal (87% of patients), endometrial (30%), ovarian (17%), gastric (14%), and other cancers existed. Five mutations detected between codons 136 and 811 included single-base substitutions (C‚ÜíT and T‚ÜíG), a T deletion, and an A insertion, all of which produced stop codons resulting in truncated proteins, and an A‚ÜíT substitution at splice donor site of exon 5 which resulted in deletion of this exon. Moreover, one HNPCC family was presumed to have germ line mutation of hMSH2 gene because a somatic mutation of hMSH2 gene was detected in a cancer from a patient in this family. In addition to these 11 families already diagnosed with HNPCC, 3 new families with germ line mutations of hMSH2 gene and hMLH1 gene were found through analysis of DNA from patients who had multiple cancers with alteration in microsatellite DNA. These mutations included an AG deletion at codons 877‚Äì878 of hMSH2 gene, an AAG deletion at codons 616‚Äì618 of hMLH1 gene, and a C‚ÜíT single-base substitution at codon 217 of hMLH1 gene. Seven of eight germ line mutations found in this study are new mutations that have not been reported previously. In families in which germ line mutations were identified presymptomatic examination was then carried out using polymerase chain reaction single-strand conformation polymorphism analysis of DNA from peripheral blood, and the result was the detection of family members predisposed to HNPCC who did not yet show signs of cancer. These results indicate the value of DNA analysis in the screening and diagnosis of HNPCC patients and families. </p>
+
+        <!-- <h2> URL: </h2> <a href='https://api.semanticscholar.org/CorpusID:22842578' target="_blank"> Link to article  </a> -->
+
+    </div>
+  
+    <div class="right">
+        <h3>Does the article make use of data?</h3>
+
+        <h4>Select an option</h4>
+    
+        <select name="data_use" style="font-size: large" required>
+        <option value="">(Please select one)</option>
+        <option>Yes</option>
+        <option>No</option>
+        </select>
+
+        <br>
+        <br>
+        
+        <h3>What type of data?</h3>
+        <h3 style="color: red">Data Category Explanations</h3>
+        <table>
+          <tbody>
+            <tr>
+              <td>
+                <span qtip="An official count of all individuals or businesses in a country.  Data is collected about all individuals or businesses in a population.">Census</span>
+              </td>
+              <td>
+                <span qtip="A survey includes a set of questions asked to sample or subset of individuals/entities in a country.  Examples are a household survey, labor force survey, business survey, agricultural survey, or health survey.">Survey Data</span>
+              </td>
+              <td>
+                <span qtip="An Administrative data source is primarily seen as a collection of data that are held by institutions belonging to the governmental sector, and that are collected and used for administrative purposes such as taxes, benefits or services.">Administrative Data</span>
+              </td>
+              <td>
+                <span qtip="Geospatial data is data with location information.  This could include data collected via satellite, map information, road locations, population maps, weather information, pedestrian information, etc.">Geospatial Data</span>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <span qtip="Private sector data is data generated by private businesses.  An example could be sales data from a business, data on restaurant bookings from open table, or data produced by Google or Apple.">Private Sector Data</span>
+              </td>
+              <td>
+                <span qtip="Sensor data could include data collected by specialized device, such as temperature data, audio, light sensors, etc.">Sensor Data</span>
+              </td>
+              <td>
+                <span qtip="Laboratory data are data collected in a laboratory, usually as part of a scientific experiment.">Laboratory Data</span>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <span qtip="This type of article may include several different sources of data from several studies that are combined into a single article.  It could also include a meta-analysis, where results of several studies are pooled together and analyzed.">Systematic Review </span>
+              </td>
+              <td>
+                <span qtip="Data source other than those mentioned">Other Source of Data</span>
+              </td>
+              <td>
+                <span qtip="Data not used in paper">Not Applicable</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Select an option (multiple options can be selected by holding cntl key).</h4>
+    
+        <select name="data_type" multiple style="font-size: large" required>
+        <option value="">(Please select 1 or more options)</option>
+        <option>Population/Business Census</option>
+        <option>Survey Data</option>
+        <option>Administrative Data</option>
+        <option>Geospatial Data</option>
+        <option>Private Sector Data</option>
+        <option>Sensor Data</option>
+        <option>Laboratory Data</option>
+        <option>Systematic Review or Meta Analysis Combining Varied Sources of Data</option>
+        <option>Other Source of Data</option>
+        <option>Not Applicable</option>
+        </select>
+
+        <br>
+        <br>
+        <h3>Which country (or countries) is being studied?</h3>
+
+        <h4>Select an option</h3>
+    
+        <select name="country" multiple style="font-size: large" required>
+          <option value="">(Please select 1 or more options)</option>
+            <option>Not Applicable</option>
+            <option>Africa</option>
+            <option>Africa Eastern and Southern</option>
+            <option>Africa Western and Central</option>
+            <option>Albania</option>
+            <option>Algeria</option>
+            <option>American Samoa</option>
+            <option>Andorra</option>
+            <option>Angola</option>
+            <option>Antigua and Barbuda</option>
+            <option>Arab World</option>
+            <option>Argentina</option>
+            <option>Armenia</option>
+            <option>Aruba</option>
+            <option>Australia</option>
+            <option>Austria</option>
+            <option>Azerbaijan</option>
+            <option>Bahamas, The</option>
+            <option>Bahrain</option>
+            <option>Bangladesh</option>
+            <option>Barbados</option>
+            <option>Belarus</option>
+            <option>Belgium</option>
+            <option>Belize</option>
+            <option>Benin</option>
+            <option>Bermuda</option>
+            <option>Bhutan</option>
+            <option>Bolivia</option>
+            <option>Bosnia and Herzegovina</option>
+            <option>Botswana</option>
+            <option>Brazil</option>
+            <option>British Virgin Islands</option>
+            <option>Brunei Darussalam</option>
+            <option>Bulgaria</option>
+            <option>Burkina Faso</option>
+            <option>Burundi</option>
+            <option>Cabo Verde</option>
+            <option>Cambodia</option>
+            <option>Cameroon</option>
+            <option>Canada</option>
+            <option>Caribbean small states</option>
+            <option>Cayman Islands</option>
+            <option>Central African Republic</option>
+            <option>Central Europe and the Baltics</option>
+            <option>Chad</option>
+            <option>Channel Islands</option>
+            <option>Chile</option>
+            <option>China</option>
+            <option>Colombia</option>
+            <option>Comoros</option>
+            <option>Congo, Dem. Rep.</option>
+            <option>Congo, Rep.</option>
+            <option>Costa Rica</option>
+            <option>Cote d'Ivoire</option>
+            <option>Croatia</option>
+            <option>Cuba</option>
+            <option>Curacao</option>
+            <option>Cyprus</option>
+            <option>Czech Republic</option>
+            <option>Denmark</option>
+            <option>Djibouti</option>
+            <option>Dominica</option>
+            <option>Dominican Republic</option>
+            <option>East Asia & Pacific</option>
+            <option>Ecuador</option>
+            <option>Egypt, Arab Rep.</option>
+            <option>El Salvador</option>
+            <option>Equatorial Guinea</option>
+            <option>Eritrea</option>
+            <option>Estonia</option>
+            <option>Eswatini</option>
+            <option>Ethiopia</option>
+            <option>Euro area</option>
+            <option>Europe & Central Asia</option>
+            <option>European Union</option>
+            <option>Faroe Islands</option>
+            <option>Fiji</option>
+            <option>Finland</option>
+            <option>France</option>
+            <option>French Polynesia</option>
+            <option>Gabon</option>
+            <option>Gambia, The</option>
+            <option>Georgia</option>
+            <option>Germany</option>
+            <option>Ghana</option>
+            <option>Gibraltar</option>
+            <option>Greece</option>
+            <option>Greenland</option>
+            <option>Grenada</option>
+            <option>Guam</option>
+            <option>Guatemala</option>
+            <option>Guinea</option>
+            <option>Guinea-Bissau</option>
+            <option>Guyana</option>
+            <option>Haiti</option>
+            <option>High income</option>
+            <option>Honduras</option>
+            <option>Hong Kong SAR, China</option>
+            <option>Hungary</option>
+            <option>Iceland</option>
+            <option>India</option>
+            <option>Indonesia</option>
+            <option>Iran, Islamic Rep.</option>
+            <option>Iraq</option>
+            <option>Ireland</option>
+            <option>Isle of Man</option>
+            <option>Israel</option>
+            <option>Italy</option>
+            <option>Jamaica</option>
+            <option>Japan</option>
+            <option>Jordan</option>
+            <option>Kazakhstan</option>
+            <option>Kenya</option>
+            <option>Kiribati</option>
+            <option>Korea, Dem. People's Rep.</option>
+            <option>Korea, Rep.</option>
+            <option>Kosovo</option>
+            <option>Kuwait</option>
+            <option>Kyrgyz Republic</option>
+            <option>Lao PDR</option>
+            <option>Latin America & Caribbean</option>
+            <option>Latvia</option>
+            <option>Lebanon</option>
+            <option>Lesotho</option>
+            <option>Liberia</option>
+            <option>Libya</option>
+            <option>Liechtenstein</option>
+            <option>Lithuania</option>
+            <option>Low & middle income</option>
+            <option>Low income</option>
+            <option>Lower middle income</option>
+            <option>Luxembourg</option>
+            <option>Macao SAR, China</option>
+            <option>Madagascar</option>
+            <option>Malawi</option>
+            <option>Malaysia</option>
+            <option>Maldives</option>
+            <option>Mali</option>
+            <option>Malta</option>
+            <option>Marshall Islands</option>
+            <option>Mauritania</option>
+            <option>Mauritius</option>
+            <option>Mexico</option>
+            <option>Micronesia, Fed. Sts.</option>
+            <option>Middle East & North Africa</option>
+            <option>Middle income</option>
+            <option>Moldova</option>
+            <option>Monaco</option>
+            <option>Mongolia</option>
+            <option>Montenegro</option>
+            <option>Morocco</option>
+            <option>Mozambique</option>
+            <option>Myanmar</option>
+            <option>Namibia</option>
+            <option>Nauru</option>
+            <option>Nepal</option>
+            <option>Netherlands</option>
+            <option>New Caledonia</option>
+            <option>New Zealand</option>
+            <option>Nicaragua</option>
+            <option>Niger</option>
+            <option>Nigeria</option>
+            <option>North Africa</option>
+            <option>North America</option>
+            <option>North Macedonia</option>
+            <option>Northern Mariana Islands</option>
+            <option>Norway</option>
+            <option>OECD members</option>
+            <option>Oman</option>
+            <option>Other small states</option>
+            <option>Pacific island small states</option>
+            <option>Pakistan</option>
+            <option>Palau</option>
+            <option>Panama</option>
+            <option>Papua New Guinea</option>
+            <option>Paraguay</option>
+            <option>Peru</option>
+            <option>Philippines</option>
+            <option>Poland</option>
+            <option>Portugal</option>
+            <option>Puerto Rico</option>
+            <option>Qatar</option>
+            <option>Romania</option>
+            <option>Russian Federation</option>
+            <option>Rwanda</option>
+            <option>Samoa</option>
+            <option>San Marino</option>
+            <option>Sao Tome and Principe</option>
+            <option>Saudi Arabia</option>
+            <option>Senegal</option>
+            <option>Serbia</option>
+            <option>Seychelles</option>
+            <option>Sierra Leone</option>
+            <option>Singapore</option>
+            <option>Sint Maarten (Dutch part)</option>
+            <option>Slovak Republic</option>
+            <option>Slovenia</option>
+            <option>Small states</option>
+            <option>Solomon Islands</option>
+            <option>Somalia</option>
+            <option>South Africa</option>
+            <option>South Asia</option>
+            <option>South Sudan</option>
+            <option>Spain</option>
+            <option>Sri Lanka</option>
+            <option>St. Kitts and Nevis</option>
+            <option>St. Lucia</option>
+            <option>St. Martin (French part)</option>
+            <option>St. Vincent and the Grenadines</option>
+            <option>Sub-Saharan Africa</option>
+            <option>Sudan</option>
+            <option>Suriname</option>
+            <option>Sweden</option>
+            <option>Switzerland</option>
+            <option>Syrian Arab Republic</option>
+            <option>Taiwan, China</option>
+            <option>Tajikistan</option>
+            <option>Tanzania</option>
+            <option>Thailand</option>
+            <option>Timor-Leste</option>
+            <option>Togo</option>
+            <option>Tonga</option>
+            <option>Trinidad and Tobago</option>
+            <option>Tunisia</option>
+            <option>Turkey</option>
+            <option>Turkmenistan</option>
+            <option>Turks and Caicos Islands</option>
+            <option>Tuvalu</option>
+            <option>Uganda</option>
+            <option>Ukraine</option>
+            <option>United Arab Emirates</option>
+            <option>United Kingdom</option>
+            <option>United States</option>
+            <option>Upper middle income</option>
+            <option>Uruguay</option>
+            <option>Uzbekistan</option>
+            <option>Vanuatu</option>
+            <option>Venezuela, RB</option>
+            <option>Vietnam</option>
+            <option>Virgin Islands (U.S.)</option>
+            <option>West Bank and Gaza</option>
+            <option>World</option>
+            <option>Yemen, Rep.</option>
+            <option>Zambia</option>
+            <option>Zimbabwe</option>
+
+        </select>
+        
+ 
+    </div>
+</crowd-form>
