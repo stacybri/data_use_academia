@@ -27,11 +27,12 @@ bibliography: bibliography.bib
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
 	echo = FALSE,
+	fig.height = 6,
+	fig.width = 9,
 	message = FALSE,
 	warning = FALSE,
-	fig.height=6,
-	fig.width=9,
-	dpi = 350	
+	dpi = 350,
+	fig.path="./figures/"
 )
 library(tidyverse)
 library(flextable)
@@ -1599,6 +1600,7 @@ modelplot(source_models,
           ) +
   labs(subtitle='Partial regression coefficients conditional on \n log GDP per capita and log population.',
       caption="Data from the World Bank's World Development Indicators (WDI) and SPI. \n Papers include all papers using data years 2000-2020. \n Confidence Intervals at 95% significance level") +
+  geom_vline(xintercept = 0) +
   theme(
     legend.position = 'none'
   )
@@ -1732,6 +1734,7 @@ modelplot(source_models,
           ) +
   labs(subtitle='Partial regression coefficients conditional on \n log GDP per capita, log population, and \n country and year fixed effects.',
       caption="Data from the World Bank's World Development Indicators (WDI) and SPI. \n Papers include all papers using data years 2000-2020. \n Confidence Intervals at 95% significance level") +
+  geom_vline(xintercept = 0) +
   theme(
     legend.position = 'none'
   )

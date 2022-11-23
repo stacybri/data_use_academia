@@ -20,8 +20,8 @@ editor: visual
 
 - Create measure of <span style="color: purple; font-weight: bold"> data use by academia </span> for each country
 
-- Train <span style="font-weight: bold">machine learning model </span> on <span style="text-decoration: underline">2,600  human coded </span> articles
-  - 87% accuracy
+- Train <span style="font-weight: bold">machine learning model </span> on <span style="text-decoration: underline">900  human coded </span> articles
+  - 87% accuracy when tested against hold-out set of <span style="text-decoration: underline">2,600  human coded </span> articles
   - Country rankings correlated 0.99
 
 - Apply to corpus of 1 million academic articles
@@ -31,6 +31,7 @@ editor: visual
   - Subjects: Medicine, Economics, Psychology, Sociology, Political Science
 
 - Measures strongly correlated with: <span style="font-weight: bold">GDP per capita, population, Statistical Performance Indicator (SPI) score </span>
+- More surveys = More academic output
 
 - High income countries produce <span style="color: blue"> 50% of all articles </span> using data
   - Low income countries produce <span style="color: orange"> 5% </span>
@@ -376,12 +377,112 @@ Academia
 ```
 
 
-## Machine Learning Approach
+## Machine Learning Approach{.smaller}
+
+
+:::{.incremental}
+
+- Used <span style="color: red"> BERT model </span> <span style="color: green">(bidirectional Encoder Representations for transformers) </span>   
+  
+  - Natural Language Processing model developed by Google initially trained on Toronto Book Corpus and Wikipedia
+  - Further trained model on 900 hand coded articles from Mturk 
+  - Tested on 2,600 articles held out of training
+    
+    - <span style="color: blue"> 87% accuracy </span>  in classifying data use
+    - When aggregating results to country level, total number of articles using data <span style="color: blue"> correlated 0.99 </span>  with human rated totals
+:::
 
 
 
-## Results
 
+
+
+## Human vs NLP Rankings
+
+![Figure. Comparison of Human Classifications of Data Use to NLP Predictions](./figures/unnamed-chunk-4-1.png)
+
+## Global Totals
+
+![Figure. Number of Articles using Data by Country (2000-2020) ](./figures/unnamed-chunk-8-1.png)
+
+## High Income Countries Produce Disproportionate Share
+
+![Figure. Total Number of articles using data by income ](./figures/unnamed-chunk-10-1.png)
+
+## Development Outcomes 
+
+::: {.r-stack}
+
+![](./figures/gdp.png){.fragment width="750" height="550"}
+
+![](./figures/population.png){.fragment width="750" height="550"}
+
+![](./figures/spi.png){.fragment width="750" height="550"}
+:::
+
+## More Surveys = Higher Academic Output {.smaller}
+
+:::{.incremental}
+- Do increases in <span style="color: green; font-weight: bold"> availability of data sources </span> lead to more <span style="color: blue; font-weight: bold">articles using data</span>?
+- Examine using linear regression:
+
+  - Take advantage of longitudinal nature of data
+  - <span style="color: blue; font-weight: bold"> Logged number of academic articles per year </span> on LHS
+  - Hold constant <span style="color: purple; font-weight: bold">population size, GDP per capita </span>, <span style="color: orange; font-weight: bold">country fixed effects</span>, <span style="color: brown; font-weight: bold">time effects </span>
+    - Use only within country variation in availability of censuses/surveys
+  - Data from 2004 to 2020
+  - 138 countries with data
+  
+:::
+
+$$\color{blue}{log(R_{it})}=\alpha + \beta \color{green}{Sources_{it}} + \gamma_1 \color{purple}{Pop_{it}} + \gamma_2 \color{purple}{GDP \_ pcap_{it}} + \color{orange}{c_i} + \color{brown}{\eta_t}  + \epsilon_{it} $$
+
+## Longitudinal Regression Results
+
+![Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources.  Panel Regression with country and year fixed effects.](./figures/panelplot-2.png)
+
+## Cross Sectional Regression Results
+
+![Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources.  Cross Sectional Regression.](./figures/crossplot-2.png)
+
+## Country Scores
+
+:::{.incremental}
+- Which countries are doing best?
+- Compare in three ways:
+  
+  1. Articles per capita
+  2. Regression adjusted approach
+    - Adjust for population and GDP per capita
+  3. Share of articles using data
+
+
+
+:::
+
+## Three approaches correlated
+
+![Figure. Country Scores under alternative scoring approaches](./figures/unnamed-chunk-24-1.png)
+
+## Regression Adjusted Scores
+
+![Figure. Regression Adjusted Country Scores (2017-2019) ](./figures/unnamed-chunk-25-1.png)
+
+## Over/Under Performers
+
+![Figure. Top 15 Over/Underperformers Compared to Population and GDP per capita.](./figures/unnamed-chunk-26-1.png)
+
+## Conclusions
+
+- Paper suggests a methodology for measuring data use by academia
+
+- NLP model classifies data use with 87% accuracy
+
+- Results correlate strongly with other results in literature and development outcomes
+
+- Producing more surveys leads to more academic output
+
+- Scores can help countries understand if statistical system producing data that meets needs of users
 
 ## Appendix
 
