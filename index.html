@@ -336,7 +336,7 @@
 <ul>
 <li class="fragment"><p>Forward Looking</p></li>
 <li class="fragment"><p>Cover all areas of statistical system</p></li>
-<li class="fragment"><p>Includes <span style="color: purple; font-weight: bold">Data Use </span></p></li>
+<li class="fragment"><p>Includes <span style="color: purple; font-weight: bold">Data Use</span></p></li>
 </ul></li>
 </ul>
 </div>
@@ -564,19 +564,26 @@
 <h2>Overview</h2>
 <div>
 <ul>
-<li class="fragment"><p>Create measure of <span style="color: purple; font-weight: bold"> data use by academia </span> for each country</p></li>
-<li class="fragment"><p>Train <span style="font-weight: bold">machine learning model </span> on <span style="text-decoration: underline">900 human coded </span> articles</p>
+<li class="fragment"><p>Create measure of <span style="color: purple; font-weight: bold">data use by academia</span> for each country</p></li>
+<li class="fragment"><p>Train <span style="font-weight: bold">machine learning model</span> on <span style="text-decoration: underline">900 human coded</span> articles</p>
 <ul>
-<li class="fragment">87% accuracy when tested against hold-out set of <span style="text-decoration: underline">2,600 human coded </span> articles</li>
+<li class="fragment">87% accuracy when tested against hold-out set of <span style="text-decoration: underline">2,600 human coded</span> articles</li>
 <li class="fragment">Country rankings correlated 0.99</li>
 </ul></li>
 <li class="fragment"><p>Apply to corpus of 1 million academic articles</p>
 <ul>
-<li class="fragment">Database: <span style="font-weight: bold"> Semantic Scholar (s2orc) </span></li>
+<li class="fragment">Database: <span style="font-weight: bold">Semantic Scholar (s2orc)</span></li>
 <li class="fragment">Language: English</li>
 <li class="fragment">Time period: 2000-2020</li>
 <li class="fragment">Subjects: Medicine, Economics, Psychology, Sociology, Political Science</li>
 </ul></li>
+</ul>
+</div>
+</section>
+<section id="key-findings" class="slide level2">
+<h2>Key Findings</h2>
+<div>
+<ul>
 <li class="fragment"><p>Measures strongly correlated with: <span style="font-weight: bold">GDP per capita, population, Statistical Performance Indicator (SPI) score </span></p></li>
 <li class="fragment"><p>More surveys = More academic output</p></li>
 <li class="fragment"><p>High income countries produce <span style="color: blue"> 50% of all articles </span> using data</p>
@@ -590,14 +597,14 @@
 <h2>Machine Learning Approach</h2>
 <div>
 <ul>
-<li class="fragment"><p>Used <span style="color: red"> BERT model </span> <span style="color: green">(bidirectional Encoder Representations for transformers) </span></p>
+<li class="fragment"><p>Used <span style="color: red">BERT model</span> <span style="color: green">(bidirectional Encoder Representations for transformers)</span></p>
 <ul>
 <li class="fragment"><p>Natural Language Processing model developed by Google initially trained on Toronto Book Corpus and Wikipedia</p></li>
 <li class="fragment"><p>Further trained model on 900 hand coded articles from Mturk</p></li>
 <li class="fragment"><p>Tested on 2,600 articles held out of training</p>
 <ul>
-<li class="fragment"><span style="color: blue"> 87% accuracy </span> in classifying data use</li>
-<li class="fragment">When aggregating results to country level, total number of articles using data <span style="color: blue"> correlated 0.99 </span> with human rated totals</li>
+<li class="fragment"><span style="color: blue">87% accuracy</span> in classifying data use</li>
+<li class="fragment">When aggregating results to country level, total number of articles using data <span style="color: blue">correlated 0.99</span> with human rated totals</li>
 </ul></li>
 </ul></li>
 <li class="fragment"><p>Country of study classified using Regular Expressions and SpaCy python package</p></li>
@@ -642,12 +649,12 @@
 <h2>More Surveys = Higher Academic Output</h2>
 <div>
 <ul>
-<li class="fragment"><p>Do increases in <span style="color: green; font-weight: bold"> availability of data sources </span> lead to more <span style="color: blue; font-weight: bold">articles using data</span>?</p></li>
+<li class="fragment"><p>Do increases in <span style="color: green; font-weight: bold">availability of data sources</span> lead to more <span style="color: blue; font-weight: bold">articles using data</span>?</p></li>
 <li class="fragment"><p>Examine using linear regression:</p>
 <ul>
 <li class="fragment">Take advantage of longitudinal nature of data</li>
-<li class="fragment"><span style="color: blue; font-weight: bold"> Logged number of academic articles per year </span> on LHS</li>
-<li class="fragment">Hold constant <span style="color: purple; font-weight: bold">population size, GDP per capita </span>, <span style="color: orange; font-weight: bold">country fixed effects</span>, <span style="color: brown; font-weight: bold">time effects </span>
+<li class="fragment"><span style="color: blue; font-weight: bold">Logged number of academic articles per year</span> on LHS</li>
+<li class="fragment">Hold constant <span style="color: purple; font-weight: bold">population size, GDP per capita</span>, <span style="color: orange; font-weight: bold">country fixed effects</span>, <span style="color: brown; font-weight: bold">time effects</span>
 <ul>
 <li class="fragment">Use only within country variation in availability of censuses/surveys</li>
 </ul></li>
