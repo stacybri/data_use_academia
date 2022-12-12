@@ -325,32 +325,6 @@
   <p class="date">12 December 2022</p>
 </section>
 
-<section id="overview" class="slide level2 smaller">
-<h2>Overview</h2>
-<div>
-<ul>
-<li class="fragment"><p>Create measure of <span style="color: purple; font-weight: bold"> data use by academia </span> for each country</p></li>
-<li class="fragment"><p>Train <span style="font-weight: bold">machine learning model </span> on <span style="text-decoration: underline">900 human coded </span> articles</p>
-<ul>
-<li class="fragment">87% accuracy when tested against hold-out set of <span style="text-decoration: underline">2,600 human coded </span> articles</li>
-<li class="fragment">Country rankings correlated 0.99</li>
-</ul></li>
-<li class="fragment"><p>Apply to corpus of 1 million academic articles</p>
-<ul>
-<li class="fragment">Database: <span style="font-weight: bold"> Semantic Scholar (s2orc) </span></li>
-<li class="fragment">Language: English</li>
-<li class="fragment">Time period: 2000-2020</li>
-<li class="fragment">Subjects: Medicine, Economics, Psychology, Sociology, Political Science</li>
-</ul></li>
-<li class="fragment"><p>Measures strongly correlated with: <span style="font-weight: bold">GDP per capita, population, Statistical Performance Indicator (SPI) score </span></p></li>
-<li class="fragment"><p>More surveys = More academic output</p></li>
-<li class="fragment"><p>High income countries produce <span style="color: blue"> 50% of all articles </span> using data</p>
-<ul>
-<li class="fragment">Low income countries produce <span style="color: orange"> 5% </span></li>
-</ul></li>
-</ul>
-</div>
-</section>
 <section id="background" class="slide level2">
 <h2>Background</h2>
 <ul>
@@ -586,9 +560,31 @@
 </ul>
 </div>
 </section>
-<section id="human-coded-articles" class="slide level2">
-<h2>Human Coded Articles</h2>
-<iframe width="900" height="650" src="./SPI_data_use_mturk_app.html" title="MTurk Documentation"></iframe>
+<section id="overview" class="slide level2 smaller">
+<h2>Overview</h2>
+<div>
+<ul>
+<li class="fragment"><p>Create measure of <span style="color: purple; font-weight: bold"> data use by academia </span> for each country</p></li>
+<li class="fragment"><p>Train <span style="font-weight: bold">machine learning model </span> on <span style="text-decoration: underline">900 human coded </span> articles</p>
+<ul>
+<li class="fragment">87% accuracy when tested against hold-out set of <span style="text-decoration: underline">2,600 human coded </span> articles</li>
+<li class="fragment">Country rankings correlated 0.99</li>
+</ul></li>
+<li class="fragment"><p>Apply to corpus of 1 million academic articles</p>
+<ul>
+<li class="fragment">Database: <span style="font-weight: bold"> Semantic Scholar (s2orc) </span></li>
+<li class="fragment">Language: English</li>
+<li class="fragment">Time period: 2000-2020</li>
+<li class="fragment">Subjects: Medicine, Economics, Psychology, Sociology, Political Science</li>
+</ul></li>
+<li class="fragment"><p>Measures strongly correlated with: <span style="font-weight: bold">GDP per capita, population, Statistical Performance Indicator (SPI) score </span></p></li>
+<li class="fragment"><p>More surveys = More academic output</p></li>
+<li class="fragment"><p>High income countries produce <span style="color: blue"> 50% of all articles </span> using data</p>
+<ul>
+<li class="fragment">Low income countries produce <span style="color: orange"> 5% </span></li>
+</ul></li>
+</ul>
+</div>
 </section>
 <section id="machine-learning-approach" class="slide level2 smaller">
 <h2>Machine Learning Approach</h2>
@@ -607,6 +603,10 @@
 <li class="fragment"><p>Country of study classified using Regular Expressions and SpaCy python package</p></li>
 </ul>
 </div>
+</section>
+<section id="human-coded-articles" class="slide level2">
+<h2>Human Coded Articles</h2>
+<iframe width="900" height="650" src="./SPI_data_use_mturk_app.html" title="MTurk Documentation"></iframe>
 </section>
 <section id="human-vs-nlp-rankings" class="slide level2">
 <h2>Human vs NLP Rankings</h2>
