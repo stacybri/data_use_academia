@@ -1,0 +1,516 @@
+---
+title: "Data Use in Academia"
+date: "12 December 2022"
+author: Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang
+format: 
+  revealjs:
+    theme: [simple, custom.scss]
+    slide-number: true
+    code-tools:
+        source: repo
+title-slide-attributes: 
+  data-background-image: ./WB-DEC-Data-horizontal-RGB-high.png
+  data-background-size: 30%
+  data-background-position: 90% 90%
+editor: visual
+---
+
+
+
+## Background
+
+-   World Bank published Statistical Performance Indicators
+
+::: {.incremental}
+-   Framework meant to be:
+
+    -   Forward Looking
+
+    -   Cover all areas of statistical system
+
+    -   Includes <span style="color: purple; font-weight: bold">Data Use </span>
+
+:::
+
+
+
+
+
+
+## SPI Framework {auto-animate="true" auto-animate-easing="ease-in-out"}
+
+::: r-hstack
+::: {data-id="box1" auto-animate-delay="0" style="background: #1d3557; width: 200px; height: 60px; margin: 10px; font-size: 28px; text-align: center; color: white"}
+Pillars
+:::
+::: {data-id="box1" auto-animate-delay="0" style="background: #1d3557; width: 800px; height: 60px; margin: 10px; font-size: 28px; text-align: center; color: white"}
+
+Dimensions
+
+
+:::
+:::
+
+
+::: r-hstack
+::: {data-id="pil1" auto-animate-delay="0" style="background: #3a0ca3; width: 200px; height: 70px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Use
+:::
+
+::: {data-id="dim11" auto-animate-delay="0.1" style="background: #7209b7; width: 128px; height: 70px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Legislative
+:::
+
+::: {data-id="dim12" auto-animate-delay="0.2" style="background: #7209b7; width: 128px; height: 70px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Executive
+:::
+
+
+::: {data-id="dim13" auto-animate-delay="0.3" style="background: #7209b7; width: 190px; height: 70px; margin: 10px; font-size: 20px; text-align: center; color: white;"}
+Civil  Society & </br> Public  Sector
+:::
+
+::: {data-id="dim14" auto-animate-delay="0.4" style="background: #480ca8; width: 128px; height: 70px; margin: 10px; font-size: 25px; text-align: center; color: white; border:4px solid #f72585"}
+Academia
+:::
+
+::: {data-id="dim15" auto-animate-delay="0.5" style="background: #7209b7; width: 190px; height: 70px; margin: 10px; font-size: 20px; position: top; text-align: center; color: white"}
+International </br> Bodies
+
+:::
+:::
+
+
+::: r-hstack
+::: {data-id="pil2" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 75px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Services
+:::
+
+::: {data-id="dim21" auto-animate-delay="0.1" style="background: #a8dadc; width: 200px; height: 75px; margin: 10px; font-size: 22px; text-align: center"}
+Quality of </br> Data Releases
+:::
+
+::: {data-id="dim22" auto-animate-delay="0.2" style="background: #a8dadc; width: 200px; height: 75px; margin: 10px; font-size: 22px; text-align: center"}
+Openness of </br> Online Access
+:::
+
+
+::: {data-id="dim23" auto-animate-delay="0.3" style="background: #a8dadc; width: 200px; height: 75px; margin: 10px; font-size: 22px; text-align: center"}
+Advisory & </br> Analytical Services
+:::
+
+::: {data-id="dim24" auto-animate-delay="0.4" style="background: #a8dadc; width: 200px; height: 75px; margin: 10px; font-size: 22px; text-align: center"}
+Data Access </br> Services
+:::
+
+:::
+
+::: r-hstack
+::: {data-id="pil3" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 65px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Products
+:::
+
+::: {data-id="dim31" auto-animate-delay="0.1" style="background: #a8dadc; width: 200px; height: 65px; margin: 10px; font-size: 25px; text-align: center"}
+Social
+:::
+
+::: {data-id="dim32" auto-animate-delay="0.2" style="background: #a8dadc; width: 200px; height: 65px; margin: 10px; font-size: 25px; text-align: center"}
+Economic
+:::
+
+
+::: {data-id="dim33" auto-animate-delay="0.3" style="background: #a8dadc; width: 200px; height: 65px; margin: 10px; font-size: 25px; text-align: center"}
+Environmental
+:::
+
+::: {data-id="dim34" auto-animate-delay="0.4" style="background: #a8dadc; width: 200px; height: 65px; margin: 10px; font-size: 25px; text-align: center"}
+Institutional
+:::
+:::
+
+
+::: r-hstack
+::: {data-id="pil4" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 75px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Sources
+:::
+
+::: {data-id="dim41" auto-animate-delay="0.1" style="background: #a8dadc; width: 220px; height: 75px; margin: 10px; font-size: 22px; text-align: center"}
+Censuses & </br> Surveys
+:::
+
+::: {data-id="dim42" auto-animate-delay="0.2" style="background: #a8dadc; width: 180px; height: 75px; margin: 10px; font-size: 25px; text-align: center"}
+Administrative
+:::
+
+
+::: {data-id="dim43" auto-animate-delay="0.3" style="background: #a8dadc; width: 180px; height: 75px; margin: 10px; font-size: 25px; text-align: center"}
+Geospatial
+:::
+
+::: {data-id="dim44" auto-animate-delay="0.4" style="background: #a8dadc; width: 220px; height: 75px; margin: 10px; font-size: 22px; text-align: center"}
+Citizen Generated & </br> Private Sector
+:::
+:::
+
+::: r-hstack
+::: {data-id="pil5" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 100px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Infrastructure
+:::
+
+::: {data-id="dim51" auto-animate-delay="0.1" style="background: #a8dadc; width: 150px; height: 100px; margin: 10px; font-size: 25px; text-align: center"}
+ Legislation
+:::
+
+::: {data-id="dim52" auto-animate-delay="0.2" style="background: #a8dadc; width: 200px; height: 100px; margin: 10px; font-size: 22px; text-align: center"}
+Openness of </br> Standards & </br> Methods
+:::
+
+
+::: {data-id="dim53" auto-animate-delay="0.3" style="background: #a8dadc; width: 150px; height: 100px; margin: 10px; font-size: 25px; text-align: center"}
+Skills
+:::
+
+::: {data-id="dim54" auto-animate-delay="0.4" style="background: #a8dadc; width: 160px; height: 100px; margin: 10px; font-size: 25px; text-align: center"}
+Partnerships
+:::
+
+::: {data-id="dim55" auto-animate-delay="0.4" style="background: #a8dadc; width: 140px; height: 100px; margin: 10px; font-size: 25px; text-align: center"}
+Finance
+:::
+
+:::
+
+
+
+
+## Need Data about Data {auto-animate="true" auto-animate-easing="ease-in-out"}
+
+::: r-hstack
+::: {data-id="box1" auto-animate-delay="0" style="background: #1d3557; width: 200px; height: 60px; margin: 10px; font-size: 28px; text-align: center; color: white"}
+Pillars
+:::
+::: {data-id="box1" auto-animate-delay="0" style="background: #1d3557; width: 800px; height: 60px; margin: 10px; font-size: 28px; text-align: center; color: white"}
+
+Dimensions
+
+
+:::
+:::
+
+
+::: r-hstack
+::: {data-id="pil1" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 70px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Use
+:::
+
+::: {data-id="dim11" auto-animate-delay="0.1" style="background: #ef476f; width: 128px; height: 70px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Legislative
+:::
+
+::: {data-id="dim12" auto-animate-delay="0.2" style="background: #ef476f; width: 128px; height: 70px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Executive
+:::
+
+
+::: {data-id="dim13" auto-animate-delay="0.3" style="background: #ef476f; width: 190px; height: 70px; margin: 10px; font-size: 20px; text-align: center; color: white;"}
+Civil  Society & </br> Public  Sector
+:::
+
+::: {data-id="dim14" auto-animate-delay="0.4" style="background: #ef476f; width: 128px; height: 70px; margin: 10px; font-size: 25px; text-align: center; color: black; border:  3px solid black"}
+Academia
+:::
+
+::: {data-id="dim15" auto-animate-delay="0.5" style="background: #06d6a0; width: 190px; height: 70px; margin: 10px; font-size: 20px; position: top; text-align: center; color: white"}
+International </br> Bodies
+
+:::
+:::
+
+
+::: r-hstack
+::: {data-id="pil2" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 75px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Services
+:::
+
+::: {data-id="dim21" auto-animate-delay="0.1" style="background: #06d6a0; width: 200px; height: 75px; margin: 10px; font-size: 22px; text-align: center; color: white"}
+Quality of </br> Data Releases
+:::
+
+::: {data-id="dim22" auto-animate-delay="0.2" style="background: #06d6a0; width: 200px; height: 75px; margin: 10px; font-size: 22px; text-align: center; color: white"}
+Openness of </br> Online Access
+:::
+
+
+::: {data-id="dim23" auto-animate-delay="0.3" style="background: #ef476f; width: 200px; height: 75px; margin: 10px; font-size: 22px; text-align: center; color: white"}
+Advisory & </br> Analytical Services
+:::
+
+::: {data-id="dim24" auto-animate-delay="0.4" style="background: #06d6a0; width: 200px; height: 75px; margin: 10px; font-size: 22px; text-align: center; color: white"}
+Data Access </br> Services
+:::
+
+:::
+
+::: r-hstack
+::: {data-id="pil3" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 65px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Products
+:::
+
+::: {data-id="dim31" auto-animate-delay="0.1" style="background: #06d6a0; width: 200px; height: 65px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Social
+:::
+
+::: {data-id="dim32" auto-animate-delay="0.2" style="background: #06d6a0; width: 200px; height: 65px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Economic
+:::
+
+
+::: {data-id="dim33" auto-animate-delay="0.3" style="background: #06d6a0; width: 200px; height: 65px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Environmental
+:::
+
+::: {data-id="dim34" auto-animate-delay="0.4" style="background: #06d6a0; width: 200px; height: 65px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Institutional
+:::
+:::
+
+
+::: r-hstack
+::: {data-id="pil4" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 75px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Sources
+:::
+
+::: {data-id="dim41" auto-animate-delay="0.1" style="background: #06d6a0; width: 220px; height: 75px; margin: 10px; font-size: 22px; text-align: center; color: white"}
+Censuses & </br> Surveys
+:::
+
+::: {data-id="dim42" auto-animate-delay="0.2" style="background: #06d6a0; width: 180px; height: 75px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Administrative
+:::
+
+
+::: {data-id="dim43" auto-animate-delay="0.3" style="background: #06d6a0; width: 180px; height: 75px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Geospatial
+:::
+
+::: {data-id="dim44" auto-animate-delay="0.4" style="background: #06d6a0; width: 220px; height: 75px; margin: 10px; font-size: 22px; text-align: center; color: white"}
+Citizen Generated & </br> Private Sector
+:::
+:::
+
+::: r-hstack
+::: {data-id="pil5" auto-animate-delay="0" style="background: #457b9d; width: 200px; height: 100px; margin: 10px; text-align: center; font-size: 28px; color: white"}
+Data Infrastructure
+:::
+
+::: {data-id="dim51" auto-animate-delay="0.1" style="background: #ffd166; width: 150px; height: 100px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+ Legislation
+:::
+
+::: {data-id="dim52" auto-animate-delay="0.2" style="background: #06d6a0; width: 200px; height: 100px; margin: 10px; font-size: 22px; text-align: center; color: white"}
+Openness of </br> Standards & </br> Methods
+:::
+
+
+::: {data-id="dim53" auto-animate-delay="0.3" style="background: #ef476f; width: 150px; height: 100px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Skills
+:::
+
+::: {data-id="dim54" auto-animate-delay="0.4" style="background: #ef476f; width: 160px; height: 100px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Partnerships
+:::
+
+::: {data-id="dim55" auto-animate-delay="0.4" style="background: #ffd166; width: 140px; height: 100px; margin: 10px; font-size: 25px; text-align: center; color: white"}
+Finance
+:::
+
+:::
+
+## Data Use in Academia  {auto-animate="true" auto-animate-easing="ease-out"}
+
+::: {.column width="40%"}
+
+::: {data-id="dim14" auto-animate-delay="0.6" style="background: #ef476f; width: 300px; height: 400px; margin: 40px; font-size: 50px; text-align: center; color: black;border:  3px solid black "}
+
+</br>
+</br>
+
+Academia
+
+:::
+
+:::
+
+::: {.column width="40%"}
+- Are academics using data produced by country?
+
+- Lack consistently updated measure of data use
+
+:::
+
+
+## Overview{.smaller}
+
+::: {.incremental}
+
+- Create measure of <span style="color: purple; font-weight: bold"> data use by academia </span> for each country
+
+- Train <span style="font-weight: bold">machine learning model </span> on <span style="text-decoration: underline">900  human coded </span> articles
+  - 87% accuracy when tested against hold-out set of <span style="text-decoration: underline">2,600  human coded </span> articles
+  - Country rankings correlated 0.99
+
+- Apply to corpus of 1 million academic articles
+  - Database: <span style="font-weight: bold"> Semantic Scholar (s2orc) </span>
+  - Language: English 
+  - Time period: 2000-2020
+  - Subjects: Medicine, Economics, Psychology, Sociology, Political Science
+:::
+
+## Key Findings 
+
+::: {.incremental}
+
+
+- Measures strongly correlated with: <span style="font-weight: bold">GDP per capita, population, Statistical Performance Indicator (SPI) score </span>
+- More surveys = More academic output
+  - <span style="color: green">Population census</span> in past 10 years associated with <span style="font-weight: bold">0.6% increase in academic output </span> using data.
+  - 2 or more <span style="color: green">household surveys </span>  in 10 years associated with <span style="font-weight: bold"> 0.5% increase in papers using data</span>.
+
+- High income countries produce <span style="color: blue"> 50% of all articles </span> using data
+  - Low income countries produce <span style="color: orange"> 5% </span>
+  
+:::
+
+
+
+## Machine Learning Approach{.smaller}
+
+
+:::{.incremental}
+
+- Used <span style="color: red"> BERT model </span> <span style="color: green">(bidirectional Encoder Representations for transformers) </span>   
+  
+  - Natural Language Processing model developed by Google initially trained on Toronto Book Corpus and Wikipedia
+  - Further trained model on 900 hand coded articles from Mturk 
+  - Tested on 2,600 articles held out of training
+    
+    - <span style="color: blue"> 87% accuracy </span>  in classifying data use
+    - When aggregating results to country level, total number of articles using data <span style="color: blue"> correlated 0.99 </span>  with human rated totals
+    
+- Country of study classified using Regular Expressions and SpaCy python package
+:::
+
+## Human Coded Articles
+
+```{=html}
+<iframe width="900" height="650" src="./SPI_data_use_mturk_app.html" title="MTurk Documentation"></iframe>
+```
+
+
+
+
+
+## Articles Example - No Data Use
+
+```
+Perlman, Andrew M.. “The Legal Ethics of Metadata Mining.” Akron law review 43 (2009): 7.
+```
+
+```{=html}
+<iframe width="900" height="650" src="./article_example_no_data.html" title="Article Not Using Data"></iframe>
+```
+
+
+## Articles Example - Data Use
+
+```
+De Pasquale, Concetta, Federica Sciacca, and Zira Hichy. "Italian validation of smartphone addiction scale short version for adolescents and young adults (SAS-SV)." Psychology 8, no. 10 (2017): 1513-1518.
+```
+
+```{=html}
+<iframe width="900" height="650" src="./article_example_use_data.html" title="Data Use Article"></iframe>
+```
+
+
+## Global Totals
+
+![Figure. Number of Articles using Data by Country (2000-2020) ](./figures/unnamed-chunk-8-1.png)
+
+## High Income Countries Produce Disproportionate Share
+
+![Figure. Total Number of articles using data by income ](./figures/unnamed-chunk-10-1.png)
+
+## Development Outcomes 
+
+::: {.r-stack}
+
+![](./figures/gdp.png){.fragment width="750" height="550"}
+
+![](./figures/population.png){.fragment width="750" height="550"}
+
+![](./figures/spi.png){.fragment width="750" height="550"}
+:::
+
+## More Surveys = Higher Academic Output {.smaller}
+
+:::{.incremental}
+- Do increases in <span style="color: green; font-weight: bold"> availability of data sources </span> lead to more <span style="color: blue; font-weight: bold">articles using data</span>?
+- Examine using linear regression:
+
+  - Take advantage of longitudinal nature of data
+  - <span style="color: blue; font-weight: bold"> Logged number of academic articles per year </span> on LHS
+  - Hold constant <span style="color: purple; font-weight: bold">population size, GDP per capita </span>, <span style="color: orange; font-weight: bold">country fixed effects</span>, <span style="color: brown; font-weight: bold">time effects </span>
+    - Use only within country variation in availability of censuses/surveys
+  - Data from 2004 to 2020
+  - 138 countries with data
+  
+:::
+
+$$\color{blue}{log(R_{it})}=\alpha + \beta \color{green}{Sources_{it}} + \gamma_1 \color{purple}{Pop_{it}} + \gamma_2 \color{purple}{GDP \_ pcap_{it}} + \color{orange}{c_i} + \color{brown}{\eta_t}  + \epsilon_{it} $$
+
+## Longitudinal Regression Results
+
+![Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources.  Panel Regression with country and year fixed effects.](./figures/panelplot-2.png)
+
+
+## Country Scores
+
+:::{.incremental}
+- Which countries are doing best?
+- Compare in three ways:
+  
+  1. Articles per capita
+  2. Regression adjusted approach
+    - Adjust for population and GDP per capita
+  3. Share of articles using data
+
+
+
+:::
+
+
+## Regression Adjusted Scores
+
+![Figure. Regression Adjusted Country Scores (2017-2019) ](./figures/unnamed-chunk-25-1.png)
+
+## Over/Under Performers
+
+![Figure. Top 15 Over/Underperformers Compared to Population and GDP per capita.](./figures/unnamed-chunk-26-1.png)
+
+## Conclusions
+
+- Paper suggests a methodology for measuring data use by academia
+
+- NLP model classifies data use with 87% accuracy
+
+- Results correlate strongly with other results in literature and development outcomes
+
+- Producing more surveys leads to more academic output
+
+- Scores can help countries understand if statistical system producing data that meets needs of users
+
+## Appendix
+
+## SPI Framework
+
+![](./SPI_framework_filled.png)

@@ -1,0 +1,109 @@
+---
+title: "DUA_pptx"
+format: pptx
+---
+
+```{r}
+library(tidyverse)
+library(flextable)
+library(here)
+library(wbstats)
+library(ggpmisc)
+library(ggthemes)
+
+
+dir <- here()
+raw_data <- paste0(dir, "/01_raw_data/")
+output <- paste0(dir, "/03_output/")
+#article share
+#share of articles that have been examined.  Will be used to estiamte total number by country
+
+prim_col <- "#219ebc"
+maj_col <- "#023047"
+min_col <- "#8ecae6"
+```
+
+
+## Overview {.smaller}
+
+::: incremental
+-   Create measure of [data use by academia]{style="color: purple; font-weight: bold"} for each country
+
+-   Train [machine learning model]{style="font-weight: bold"} on [900 human coded]{style="text-decoration: underline"} articles
+
+    -   87% accuracy when tested against hold-out set of [2,600 human coded]{style="text-decoration: underline"} articles
+    -   Country rankings correlated 0.99
+
+-   Apply to corpus of 1 million academic articles
+
+    -   Database: [Semantic Scholar (s2orc)]{style="font-weight: bold"}
+    -   Language: English
+    -   Time period: 2000-2020
+    -   Subjects: Medicine, Economics, Psychology, Sociology, Political Science
+:::
+
+
+## Articles Example - No Data Use
+
+
+![](./article_example_no_data.png)
+
+## Research Deserts, Oasis, Oceans, and Swamps
+
+```{r}
+#| label: fig-desert
+#| fig-width: 10
+#| fig-height: 10
+
+load(paste0(raw_data, '/misc/maps.Rdata'))
+standard_crop_wintri <- function() {
+  l <- list(
+    left=-12000000, right=16396891,
+    top=9400000, bottom=-6500000
+  )
+  l$xlim <- c(l$left, l$right)
+  l$ylim <- c(l$bottom, l$top)
+  l
+}
+
+data <- read_csv(paste0(output, "/country_classification_desertsoceans.csv"))
+
+  map_df <- data %>%
+    filter(date==max(date, na.rm=T)) %>%
+    select(iso3c, category) %>%
+    right_join(wbstats::wb_countries()) %>%
+    filter(region!="Aggregates")  
+  
+  
+    #set color pallete
+  col_pal <- c("#8338ec","#ff006e","#fb5607","#ffbe0b")  
+  names(col_pal) <- c("Ocean","Oasis","Swamp","Desert" )
+  
+   p1 <- ggplot() +
+    geom_map(data = map_df, aes(map_id = iso3c, fill = category), map = maps$countries) + 
+    geom_polygon(data = maps$disputed, aes(long, lat, group = group, map_id = id), fill = "grey80") + 
+    geom_polygon(data = maps$lakes, aes(long, lat, group = group), fill = "white")  +
+     geom_path(data = maps$boundaries,
+               aes(long, lat, group = group),
+               color = "white",
+               size = 0.3,
+               lineend = maps$boundaries$lineend,
+              linetype = maps$boundaries$linetype) +
+    scale_x_continuous(expand = c(0, 0), limits = standard_crop_wintri()$xlim) +
+    scale_y_continuous(expand = c(0, 0), limits = standard_crop_wintri()$ylim) +
+    scale_fill_manual(
+      name='Data Use',
+      values=col_pal,
+      na.value='grey'
+    ) +
+    coord_equal() +
+    theme_map(base_size=12) +
+    labs(
+      title=str_wrap('Data Use in Academia',100),
+      caption = 'Source: SPI',
+      fill='Papers'
+    )
+
+p1
+```
+

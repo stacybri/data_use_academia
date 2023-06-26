@@ -7,9 +7,10 @@
 <link href="Data_Use_Academia_presentation_files/libs/quarto-html/tippy.css" rel="stylesheet">
 <link href="Data_Use_Academia_presentation_files/libs/quarto-html/quarto-html.min.css" rel="stylesheet" data-mode="light">
 <link href="Data_Use_Academia_presentation_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
-  <meta name="generator" content="quarto-1.0.38">
+  <meta name="generator" content="quarto-1.2.335">
 
-  <meta name="dcterms.date" content="2022-12-12">
+  <meta name="author" content="Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang">
+  <meta name="dcterms.date" content="2023-05-15">
   <title>Data Use in Academia</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,10 +20,15 @@
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    span.underline{text-decoration: underline;}
-    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
   </style>
   <link rel="stylesheet" href="Data_Use_Academia_presentation_files/libs/revealjs/dist/theme/quarto.css" id="theme">
   <link href="Data_Use_Academia_presentation_files/libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
@@ -318,36 +324,18 @@
   <div class="reveal">
     <div class="slides">
 
-<section id="title-slide" data-background-image="./WB-DEC-Data-horizontal-RGB-high.png" data-background-position="90% 90%" data-background-size="30%" class="center">
+<section id="title-slide" data-background-image="./WB-DEC-Data-horizontal-RGB-high.png" data-background-position="90% 90%" data-background-size="30%" class="quarto-title-block center">
   <h1 class="title">Data Use in Academia</h1>
-  <p class="date">12 December 2022</p>
-</section>
 
-<section id="overview" class="slide level2 smaller">
-<h2>Overview</h2>
-<div>
-<ul>
-<li class="fragment"><p>Create measure of <span style="color: purple; font-weight: bold"> data use by academia </span> for each country</p></li>
-<li class="fragment"><p>Train <span style="font-weight: bold">machine learning model </span> on <span style="text-decoration: underline">900 human coded </span> articles</p>
-<ul>
-<li class="fragment">87% accuracy when tested against hold-out set of <span style="text-decoration: underline">2,600 human coded </span> articles</li>
-<li class="fragment">Country rankings correlated 0.99</li>
-</ul></li>
-<li class="fragment"><p>Apply to corpus of 1 million academic articles</p>
-<ul>
-<li class="fragment">Database: <span style="font-weight: bold"> Semantic Scholar (s2orc) </span></li>
-<li class="fragment">Language: English</li>
-<li class="fragment">Time period: 2000-2020</li>
-<li class="fragment">Subjects: Medicine, Economics, Psychology, Sociology, Political Science</li>
-</ul></li>
-<li class="fragment"><p>Measures strongly correlated with: <span style="font-weight: bold">GDP per capita, population, Statistical Performance Indicator (SPI) score </span></p></li>
-<li class="fragment"><p>More surveys = More academic output</p></li>
-<li class="fragment"><p>High income countries produce <span style="color: blue"> 50% of all articles </span> using data</p>
-<ul>
-<li class="fragment">Low income countries produce <span style="color: orange"> 5% </span></li>
-</ul></li>
-</ul>
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang 
 </div>
+</div>
+</div>
+
+  <p class="date">May 15, 2023</p>
 </section>
 <section id="background" class="slide level2">
 <h2>Background</h2>
@@ -360,7 +348,7 @@
 <ul>
 <li class="fragment"><p>Forward Looking</p></li>
 <li class="fragment"><p>Cover all areas of statistical system</p></li>
-<li class="fragment"><p>Includes <span style="color: purple; font-weight: bold">Data Use </span></p></li>
+<li class="fragment"><p>Includes <span style="color: purple; font-weight: bold">Data Use</span></p></li>
 </ul></li>
 </ul>
 </div>
@@ -584,31 +572,75 @@
 </ul>
 </div>
 </section>
-<section id="human-coded-articles" class="slide level2">
-<h2>Human Coded Articles</h2>
-<iframe width="900" height="650" src="./SPI_data_use_mturk_app.html" title="MTurk Documentation"></iframe>
+<section id="overview" class="slide level2 smaller">
+<h2>Overview</h2>
+<div>
+<ul>
+<li class="fragment"><p>Create measure of <span style="color: purple; font-weight: bold">data use by academia</span> for each country</p></li>
+<li class="fragment"><p>Train <span style="font-weight: bold">machine learning model</span> on <span style="text-decoration: underline">900 human coded</span> articles</p>
+<ul>
+<li class="fragment">87% accuracy when tested against hold-out set of <span style="text-decoration: underline">2,600 human coded</span> articles</li>
+<li class="fragment">Country rankings correlated 0.99</li>
+</ul></li>
+<li class="fragment"><p>Apply to corpus of 1 million academic articles</p>
+<ul>
+<li class="fragment">Database: <span style="font-weight: bold">Semantic Scholar (s2orc)</span></li>
+<li class="fragment">Language: English</li>
+<li class="fragment">Time period: 2000-2020</li>
+<li class="fragment">Subjects: Medicine, Economics, Psychology, Sociology, Political Science</li>
+</ul></li>
+</ul>
+</div>
+</section>
+<section id="key-findings" class="slide level2">
+<h2>Key Findings</h2>
+<div>
+<ul>
+<li class="fragment"><p>Measures strongly correlated with: <span style="font-weight: bold">GDP per capita, population, Statistical Performance Indicator (SPI) score</span></p></li>
+<li class="fragment"><p>More surveys = More academic output</p></li>
+<li class="fragment"><p>High income countries produce <span style="color: blue">50% of all articles</span> using data</p>
+<ul>
+<li class="fragment">Low income countries produce <span style="color: orange">5%</span></li>
+</ul></li>
+</ul>
+</div>
 </section>
 <section id="machine-learning-approach" class="slide level2 smaller">
 <h2>Machine Learning Approach</h2>
 <div>
 <ul>
-<li class="fragment"><p>Used <span style="color: red"> BERT model </span> <span style="color: green">(bidirectional Encoder Representations for transformers) </span></p>
+<li class="fragment"><p>Used <span style="color: red">BERT model</span> <span style="color: green">(bidirectional Encoder Representations for transformers)</span></p>
 <ul>
 <li class="fragment"><p>Natural Language Processing model developed by Google initially trained on Toronto Book Corpus and Wikipedia</p></li>
 <li class="fragment"><p>Further trained model on 900 hand coded articles from Mturk</p></li>
 <li class="fragment"><p>Tested on 2,600 articles held out of training</p>
 <ul>
-<li class="fragment"><span style="color: blue"> 87% accuracy </span> in classifying data use</li>
-<li class="fragment">When aggregating results to country level, total number of articles using data <span style="color: blue"> correlated 0.99 </span> with human rated totals</li>
+<li class="fragment"><span style="color: blue">87% accuracy</span> in classifying data use</li>
+<li class="fragment">When aggregating results to country level, total number of articles using data <span style="color: blue">correlated 0.99</span> with human rated totals</li>
 </ul></li>
 </ul></li>
+<li class="fragment"><p>Country of study classified using Regular Expressions and SpaCy python package</p></li>
 </ul>
 </div>
+</section>
+<section id="human-coded-articles" class="slide level2">
+<h2>Human Coded Articles</h2>
+<iframe width="900" height="650" src="./SPI_data_use_mturk_app.html" title="MTurk Documentation"></iframe>
 </section>
 <section id="human-vs-nlp-rankings" class="slide level2">
 <h2>Human vs NLP Rankings</h2>
 
 <img data-src="./figures/unnamed-chunk-4-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Comparison of Human Classifications of Data Use to NLP Predictions</p></section>
+<section id="articles-example---no-data-use" class="slide level2">
+<h2>Articles Example - No Data Use</h2>
+<pre><code>Perlman, Andrew M.. “The Legal Ethics of Metadata Mining.” Akron law review 43 (2009): 7.</code></pre>
+<iframe width="900" height="650" src="./article_example_no_data.html" title="Article Not Using Data"></iframe>
+</section>
+<section id="articles-example---data-use" class="slide level2">
+<h2>Articles Example - Data Use</h2>
+<pre><code>De Pasquale, Concetta, Federica Sciacca, and Zira Hichy. "Italian validation of smartphone addiction scale short version for adolescents and young adults (SAS-SV)." Psychology 8, no. 10 (2017): 1513-1518.</code></pre>
+<iframe width="900" height="650" src="./article_example_use_data.html" title="Data Use Article"></iframe>
+</section>
 <section id="global-totals" class="slide level2">
 <h2>Global Totals</h2>
 
@@ -629,12 +661,12 @@
 <h2>More Surveys = Higher Academic Output</h2>
 <div>
 <ul>
-<li class="fragment"><p>Do increases in <span style="color: green; font-weight: bold"> availability of data sources </span> lead to more <span style="color: blue; font-weight: bold">articles using data</span>?</p></li>
+<li class="fragment"><p>Do increases in <span style="color: green; font-weight: bold">availability of data sources</span> lead to more <span style="color: blue; font-weight: bold">articles using data</span>?</p></li>
 <li class="fragment"><p>Examine using linear regression:</p>
 <ul>
 <li class="fragment">Take advantage of longitudinal nature of data</li>
-<li class="fragment"><span style="color: blue; font-weight: bold"> Logged number of academic articles per year </span> on LHS</li>
-<li class="fragment">Hold constant <span style="color: purple; font-weight: bold">population size, GDP per capita </span>, <span style="color: orange; font-weight: bold">country fixed effects</span>, <span style="color: brown; font-weight: bold">time effects </span>
+<li class="fragment"><span style="color: blue; font-weight: bold">Logged number of academic articles per year</span> on LHS</li>
+<li class="fragment">Hold constant <span style="color: purple; font-weight: bold">population size, GDP per capita</span>, <span style="color: orange; font-weight: bold">country fixed effects</span>, <span style="color: brown; font-weight: bold">time effects</span>
 <ul>
 <li class="fragment">Use only within country variation in availability of censuses/surveys</li>
 </ul></li>
@@ -953,7 +985,24 @@
         button.classList.add('code-copy-button-checked');
         var currentTitle = button.getAttribute("title");
         button.setAttribute("title", "Copied!");
+        let tooltip;
+        if (window.bootstrap) {
+          button.setAttribute("data-bs-toggle", "tooltip");
+          button.setAttribute("data-bs-placement", "left");
+          button.setAttribute("data-bs-title", "Copied!");
+          tooltip = new bootstrap.Tooltip(button, 
+            { trigger: "manual", 
+              customClass: "code-copy-button-tooltip",
+              offset: [0, -8]});
+          tooltip.show();    
+        }
         setTimeout(function() {
+          if (tooltip) {
+            tooltip.hide();
+            button.removeAttribute("data-bs-title");
+            button.removeAttribute("data-bs-toggle");
+            button.removeAttribute("data-bs-placement");
+          }
           button.setAttribute("title", currentTitle);
           button.classList.remove('code-copy-button-checked');
         }, 1000);
@@ -983,31 +1032,50 @@
       for (var i=0; i<noterefs.length; i++) {
         const ref = noterefs[i];
         tippyHover(ref, function() {
-          let href = ref.getAttribute('href');
+          // use id or data attribute instead here
+          let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
           try { href = new URL(href).hash; } catch {}
           const id = href.replace(/^#\/?/, "");
           const note = window.document.getElementById(id);
           return note.innerHTML;
         });
       }
+      const findCites = (el) => {
+        const parentEl = el.parentElement;
+        if (parentEl) {
+          const cites = parentEl.dataset.cites;
+          if (cites) {
+            return {
+              el,
+              cites: cites.split(' ')
+            };
+          } else {
+            return findCites(el.parentElement)
+          }
+        } else {
+          return undefined;
+        }
+      };
       var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
       for (var i=0; i<bibliorefs.length; i++) {
         const ref = bibliorefs[i];
-        const cites = ref.parentNode.getAttribute('data-cites').split(' ');
-        tippyHover(ref, function() {
-          var popup = window.document.createElement('div');
-          cites.forEach(function(cite) {
-            var citeDiv = window.document.createElement('div');
-            citeDiv.classList.add('hanging-indent');
-            citeDiv.classList.add('csl-entry');
-            var biblioDiv = window.document.getElementById('ref-' + cite);
-            if (biblioDiv) {
-              citeDiv.innerHTML = biblioDiv.innerHTML;
-            }
-            popup.appendChild(citeDiv);
+        const citeInfo = findCites(ref);
+        if (citeInfo) {
+          tippyHover(citeInfo.el, function() {
+            var popup = window.document.createElement('div');
+            citeInfo.cites.forEach(function(cite) {
+              var citeDiv = window.document.createElement('div');
+              citeDiv.classList.add('hanging-indent');
+              citeDiv.classList.add('csl-entry');
+              var biblioDiv = window.document.getElementById('ref-' + cite);
+              if (biblioDiv) {
+                citeDiv.innerHTML = biblioDiv.innerHTML;
+              }
+              popup.appendChild(citeDiv);
+            });
+            return popup.innerHTML;
           });
-          return popup.innerHTML;
-        });
+        }
       }
     });
     </script>
