@@ -1365,24 +1365,41 @@ Table. Longitudinal Relationships between Number of Papers Using Data and Statis
 ```{r}
 
 #supplement longitudinal data with sci
-sci_indicators <- c("2.01.01.02.nabase", # National accounts base year
-                    "2.01.03.01.prcpbase", #Consumer price index base year
-                    "2.04.01.01.excncpt", # Balance of payments manual in use
-                    "3.01.04.01.agcen", # Agricultural census
-                    "3.02.01.02.fscov", # Government finance accounting
-                    "3.11.01.01.popcen",   #Population census
-                    "3.11.01.03.popreg", #Vital registration system coverage
-                    "5.04.01.01.exdebt", #External debt reporting status
-                    "5.13.01.01.hlthsurv", #Health survey
-                    "5.14.01.01.povsurv", #Poverty survey
-                    "5.21.01.01.sdds") #Special Data Dissemination Standard)
+sci_supplement_df <- readxl::read_excel(paste0(raw_data, "/misc/Statistical_Capacity_Indicators.xlsx"), sheet="Data") %>%
+  mutate(across(c('YR2004':'YR2020'), as.numeric)) %>%
+  pivot_longer(
+    cols=c('YR2004':'YR2020'),
+    names_to="Year",
+    values_to="value"
+  ) %>%
+  mutate(date=str_remove(Year, "YR")) %>%
+  select(-Year) %>%
+  filter(!is.na(`Series Code`)) %>%
+  rename(iso3c=`Country Code`) %>%
+  pivot_wider(
+    names_from=`Series Code`, 
+    values_from=value,
+    values_fill=as.numeric(NA)
+  )
 
-sci_supplement_df <- wb_data(
-  indicator=sci_indicators,
-  start_date=2004,
-  end_date=2020,
-  country="countries_only"
-)
+# sci_indicators <- c("2.01.01.02.nabase", # National accounts base year
+#                     "2.01.03.01.prcpbase", #Consumer price index base year
+#                     "2.04.01.01.excncpt", # Balance of payments manual in use
+#                     "3.01.04.01.agcen", # Agricultural census
+#                     "3.02.01.02.fscov", # Government finance accounting
+#                     "3.11.01.01.popcen",   #Population census
+#                     "3.11.01.03.popreg", #Vital registration system coverage
+#                     "5.04.01.01.exdebt", #External debt reporting status
+#                     "5.13.01.01.hlthsurv", #Health survey
+#                     "5.14.01.01.povsurv", #Poverty survey
+#                     "5.21.01.01.sdds") #Special Data Dissemination Standard)
+# 
+# sci_supplement_df <- wb_data(
+#   indicator=sci_indicators,
+#   start_date=2004,
+#   end_date=2020,
+#   country="countries_only"
+# )
 
 reg_pan <- country_scores_annual_df %>%
   left_join(sci_supplement_df) %>%
