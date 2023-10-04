@@ -47,7 +47,7 @@ raw_data <- paste0(dir, "/01_raw_data/")
 output <- paste0(dir, "/03_output/")
 s3_output <- 'https://data-use-academia.s3.amazonaws.com/03_output/'#for the bigger files kept on S3
 #article share
-#share of articles that have been examined.  Will be used to estiamte total number by country
+#share of articles that have been examined.  Will be used to estimate total number by country
 article_share=11/100
 
 #set lower year for papers
@@ -1252,9 +1252,10 @@ models <- list(
   '(2)'=feols(log(data_papers) ~ log(SP.POP.TOTL), data=reg_df_fixedn, se='hetero') ,  
   '(3)'=feols(log(data_papers) ~ SPI.INDEX, data=reg_df_fixedn, se='hetero') ,  
   #'(4)'=lm_robust(log(data_papers) ~ SPI.INDEX, data=reg_df_fixedn) ,  
-  '(4)'=feols(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn, se='hetero'),
+  '(4)'=feols(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn, se='hetero'),
+  '(5)'=feols(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn, se='hetero'),
   #'(6)'=lm_robust(log(data_papers) ~ SPI.INDEX + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 , data=reg_df_fixedn) ,  
-  '(5)'=feols(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL)  , data=reg_df_fixedn, se='hetero')
+  '(6)'=feols(log(data_papers) ~ SPI.INDEX.PIL1 + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL)  , data=reg_df_fixedn, se='hetero')
   # '(6)'=lm_robust(log(data_papers) ~ SPI.D4.1.1.POPU + SPI.D4.1.2.AGRI + SPI.D4.1.3.BIZZ + SPI.D4.1.4.HOUS + SPI.D4.1.5.AGSVY + SPI.D4.1.6.LABR + SPI.D4.1.7.HLTH + SPI.D4.1.8.BZSVY +  SPI.D4.2.3.CRVS + SPI.D4.3.GEO.first.admin.level + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn) 
   )
 
@@ -1934,138 +1935,181 @@ country_scores_annual_df <- country_scores_annual_df %>%
     SPI.INDEX.PIL2_3yr=rollmean(SPI.INDEX.PIL2, k=3, align='left', fill=NA),
     SPI.INDEX.PIL4_3yr=rollmean(SPI.INDEX.PIL4, k=3, align='left', fill=NA),
     SPI.INDEX.PIL5_3yr=rollmean(SPI.INDEX.PIL5, k=3, align='left', fill=NA),
+    qual_papers = papers - data_papers,
+    qual_papers_3yr = rollmean(qual_papers, k=3, align='left', fill=NA),
+    NY.GDP.PCAP.PP.KD_3yr= rollmean(NY.GDP.PCAP.PP.KD, k=3, align='left', fill=NA),
+    SP.POP.TOTL_3yr = rollmean(SP.POP.TOTL, k=3, align='left', fill=NA)
   ) 
 #test <- country_scores_annual_df %>% filter(iso3c == "SWE")
 
-# Log data papers population and GDPpc regression adjusted
-mod <- fixest::feols(log(data_papers_3yr)~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | date,  data=country_scores_annual_df) 
-country_scores_annual_df <- country_scores_annual_df %>%
-  modelr::add_residuals(mod, var='data_use_reg_adjusted_3yr') 
-  
 # SPI Pillars 2 (Data Services), 4 (Data Sources), 5 (Data Infrastructure) 
 country_scores_annual_df <- country_scores_annual_df %>%
   rowwise() %>%
   mutate(SPI.INDEX.PIL2.4.5 = mean(c(SPI.INDEX.PIL2,SPI.INDEX.PIL4,SPI.INDEX.PIL5),na.rm = T),
          SPI.INDEX.PIL2.4.5_3yr = mean(c(SPI.INDEX.PIL2_3yr,SPI.INDEX.PIL4_3yr,SPI.INDEX.PIL5_3yr),na.rm = T))
-mod <- fixest::feols(log(SPI.INDEX.PIL2.4.5_3yr)~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | date,
-                     data=country_scores_annual_df) 
+
+
+#  SPI Pillars 4 (Data Sources), 5 (Data Infrastructure) 
 country_scores_annual_df <- country_scores_annual_df %>%
-  modelr::add_residuals(mod, var='SPI.INDEX.PIL2.4.5_3yr_adjusted') 
+  rowwise() %>%
+  mutate(SPI.INDEX.PIL4.5 = mean(c(SPI.INDEX.PIL4,SPI.INDEX.PIL5),na.rm = T),
+         SPI.INDEX.PIL4.5_3yr = mean(c(SPI.INDEX.PIL4_3yr,SPI.INDEX.PIL5_3yr),na.rm = T))
 
 # For plotting only take year 2020, and countries with more than one million pop
 df_plot <- country_scores_annual_df %>%
   #filter(date <= 2020 & date >= 2018) %>%
-  filter(date == 2020) %>%
+  filter(date == 2019) %>%
   filter(SP.POP.TOTL>10^6) %>%
-  select(iso3c, date, region, income_level, data_papers_3yr,data_use_reg_adjusted_3yr, SPI.INDEX.PIL2.4.5_3yr_adjusted,SPI.INDEX.PIL2.4.5_3yr,SP.POP.TOTL,NY.GDP.PCAP.PP.KD,
-         SPI.INDEX.PIL2_3yr,SPI.INDEX.PIL4_3yr,SPI.INDEX.PIL5_3yr,SPI.INDEX.PIL2,SPI.INDEX.PIL4,SPI.INDEX.PIL5)
+  select(iso3c, date, region, income_level, data_papers_3yr, SPI.INDEX.PIL4.5_3yr,SP.POP.TOTL,NY.GDP.PCAP.PP.KD,
+         SPI.INDEX.PIL2_3yr,SPI.INDEX.PIL4_3yr,SPI.INDEX.PIL5_3yr,SPI.INDEX.PIL2,SPI.INDEX.PIL4,SPI.INDEX.PIL5,
+         NY.GDP.PCAP.PP.KD_3yr, SP.POP.TOTL_3yr,qual_papers_3yr)
 
-# # Calculate median values
-# median_x <- median(df_plot$SPI.INDEX.PIL2.4.5_3yr_adjusted, na.rm = TRUE)
-# median_y <- median(df_plot$data_use_reg_adjusted_3yr, na.rm = TRUE)
-# min_y <- min(df_plot_outl$data_use_reg_adjusted_3yr, na.rm = T)
-# max_y <- max(df_plot_outl$data_use_reg_adjusted_3yr, na.rm = T)
-# min_x <- min(df_plot_outl$SPI.INDEX.PIL2.4.5_3yr_adjusted, na.rm = T)
-# max_x <- max(df_plot_outl$SPI.INDEX.PIL2.4.5_3yr_adjusted, na.rm = T)
-# 
-# # Remove outliers
-# df_plot_outl <- df_plot %>%
-#   filter(!(iso3c %in% c("LBY", "TKM")))
-# 
-# # Generate scatter plot
-# ggplot(df_plot_outl, aes(x = SPI.INDEX.PIL2.4.5_3yr_adjusted, y = data_use_reg_adjusted_3yr)) +
-#   geom_point(aes(colour = income_level)) +
-#   geom_text_repel(aes(label = iso3c)) +
-#   geom_vline(xintercept = median_x, linetype="dashed", color = "red") +
-#   geom_hline(yintercept = median_y, linetype="dashed", color = "red") +
-#   geom_richtext(aes(x = min_x, y = min_y, label = "<b>Deserts: <br>low data supply, <br>little data research</b>"), fill = "lightblue") +  
-#   geom_richtext(aes(x = max_x, y = max_y, label = "<b>Oceans: <br>high data supply, <br>high data research</b>"), fill = "lightblue") +  
-#   geom_richtext(aes(x = max_x, y = min_y, label = "<b>Swamps: <br>high data supply, <br>little data research</b>"), fill = "lightblue") +  
-#   geom_richtext(aes(x = min_x, y = max_y, label = "<b>Oases: <br>low data supply, <br>high data research</b>"), fill = "lightblue") +
-#   scale_x_continuous(expand = expansion(mult = c(0.1, 0.1))) +
-#   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1))) +
-#   labs(y = "Regression adjusted papers using data (avg 2018-2020)", 
-#        x = "Regression adjusted SPI Pillars 2, 4, 5 (avg. 2018-2020)",
-#        colour = NULL) +
-#   guides(colour = guide_legend(nrow = 1, title.position = "top", title.hjust = 0.5)) +
-#   theme(legend.position = "bottom", legend.title = element_blank()) +
-#   labs(caption = "LBY, TKM not shown.")
-# 
-#   # Classify each country
-# df_plot <- df_plot %>%
-#   mutate(category = ifelse(SPI.INDEX.PIL2.4.5_3yr_adjusted <= median_x & data_use_reg_adjusted_3yr <= median_y, "Desert",
-#                            ifelse(SPI.INDEX.PIL2.4.5_3yr_adjusted > median_x & data_use_reg_adjusted_3yr <= median_y, "Swamp",
-#                                   ifelse(SPI.INDEX.PIL2.4.5_3yr_adjusted <= median_x & data_use_reg_adjusted_3yr > median_y, "Oasis",
-#                                          "Ocean")))) %>%
-#   arrange(category,iso3c)
-# 
-# # Export df_plot to a CSV file
-# path <- paste0(dirname(getwd()),"/03_output/country_classification_desertsoceans_adjusted.csv")
-# write.csv(df_plot, path, row.names = FALSE)
+
+# Log data papers population and GDPpc regression adjusted
+# mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date,  data=country_scores_annual_df) 
+mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL_3yr) + log(NY.GDP.PCAP.PP.KD_3yr),  data=df_plot)
+df_plot <- df_plot %>%
+  modelr::add_residuals(mod, var='data_use_reg_adjusted_3yr') 
+
+# Log data papers population and GDPpc AND QUALITATIVE PAPERS regression adjusted
+df_plot$qual_papers_3yr_plus1 <- df_plot$qual_papers_3yr + 1 
+mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL_3yr) + log(NY.GDP.PCAP.PP.KD_3yr) + log(qual_papers_3yr_plus1),  data=df_plot)
+df_plot <- df_plot %>%
+  modelr::add_residuals(mod, var='data_use_reg_adjusted_3yr_v2') 
+
+#adjust spi pillar 4 for log qualitative papers
+mod <- fixest::feols(SPI.INDEX.PIL4_3yr~  log(SP.POP.TOTL_3yr) + log(NY.GDP.PCAP.PP.KD_3yr) + log(qual_papers_3yr_plus1),  data=df_plot)
+df_plot <- df_plot %>%
+  modelr::add_residuals(mod, var='SPI.INDEX.PIL4_3yr_reg_adjusted_3yr_v2') 
+  
+
 
 # Calculate median values
-median_x <- median(df_plot$SPI.INDEX.PIL2.4.5_3yr, na.rm = TRUE)
-median_y <- median(df_plot$data_use_reg_adjusted_3yr, na.rm = TRUE)
+median_x <- median(df_plot$SPI.INDEX.PIL4_3yr, na.rm = TRUE)
+median_y <- median(df_plot$data_papers_3yr, na.rm = TRUE)
+median_x_v2 <- median(df_plot$SPI.INDEX.PIL4_3yr_reg_adjusted_3yr_v2, na.rm = TRUE)
+median_y_v2 <- median(df_plot$data_use_reg_adjusted_3yr_v2, na.rm = TRUE)
 
 # Remove outliers
  df_plot_outl <- df_plot %>%
    filter(!(iso3c %in% c("LBY", "TKM")))
 
 # For labels 
-min_y <- min(df_plot_outl$data_use_reg_adjusted_3yr, na.rm = T)
-max_y <- max(df_plot_outl$data_use_reg_adjusted_3yr, na.rm = T)
-min_x <- min(df_plot_outl$SPI.INDEX.PIL2.4.5_3yr, na.rm = T)
-max_x <- max(df_plot_outl$SPI.INDEX.PIL2.4.5_3yr, na.rm = T)
-
+min_y <- min(df_plot_outl$data_papers_3yr, na.rm = T)
+max_y <- max(df_plot_outl$data_papers_3yr, na.rm = T)
+min_y_v2 <- min(df_plot_outl$data_use_reg_adjusted_3yr_v2, na.rm = T)
+max_y_v2 <- max(df_plot_outl$data_use_reg_adjusted_3yr_v2, na.rm = T)
+min_x <- min(df_plot_outl$SPI.INDEX.PIL4_3yr, na.rm = T)
+max_x <- max(df_plot_outl$SPI.INDEX.PIL4_3yr, na.rm = T)
+min_x_v2 <- min(df_plot_outl$SPI.INDEX.PIL4_3yr_reg_adjusted_3yr_v2, na.rm = T)
+max_x_v2 <- max(df_plot_outl$SPI.INDEX.PIL4_3yr_reg_adjusted_3yr_v2, na.rm = T)
 # Generate scatter plot region
-ggplot(df_plot, aes(x = SPI.INDEX.PIL2.4.5_3yr, y = data_use_reg_adjusted_3yr)) +
-  geom_point(aes(colour = region)) +
-  geom_text_repel(aes(label = iso3c)) +
-  geom_vline(xintercept = median_x, linetype="dashed", color = "red") +
-  geom_hline(yintercept = median_y, linetype="dashed", color = "red") +
-  geom_richtext(aes(x = min_x, y = min_y, label = "<b>Deserts: <br>low data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
-  geom_richtext(aes(x = max_x, y = (max_y+0.1), label = "<b>Oceans: <br>high data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +  
-  geom_richtext(aes(x = max_x, y = min_y, label = "<b>Swamps: <br>high data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
-  geom_richtext(aes(x = min_x, y = (max_y+0.1), label = "<b>Oases: <br>low data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +
-  scale_x_continuous(expand = expansion(mult = c(0.1, 0.12))) +
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.12))) +
-  labs(y = "Regression adjusted # papers using data (avg. 2018-2020)", 
-       x = "SPI Pillars 2, 4, 5 (avg. 2018-2020)",
-       colour = NULL) +
-  guides(colour = guide_legend(nrow = 2, title.position = "top", title.hjust = 0.5)) +
-  theme(legend.position = "bottom", legend.title = element_blank())  + 
-  labs(caption = "Red lines indicate median values.")
-path <- paste0(dirname(getwd()),"/02_programs/figures/country_classification_desertsoceans_region.png")
-ggsave(path, width = 9, height = 8.1)
+# ggplot(df_plot, aes(x = SPI.INDEX.PIL4_3yr, y = data_papers_3yr)) +
+#   geom_point(aes(colour = region)) +
+#   geom_text_repel(aes(label = iso3c)) +
+#   geom_vline(xintercept = median_x, linetype="dashed", color = "red") +
+#   geom_hline(yintercept = median_y, linetype="dashed", color = "red") +
+#   geom_richtext(aes(x = min_x, y = min_y, label = "<b>Deserts: <br>low data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
+#   geom_richtext(aes(x = max_x, y = (max_y+200), label = "<b>Lakes: <br>high data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +  
+#   geom_richtext(aes(x = max_x, y = min_y, label = "<b>Swamps: <br>high data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
+#   geom_richtext(aes(x = min_x, y = (max_y+100), label = "<b>Oases: <br>low data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +
+#   scale_x_continuous(expand = expansion(mult = c(0.2, 0.2))) +
+#   scale_y_log10(labels=scales::comma,
+#                 expand = expansion(mult = c(0.2, .2))) +
+#   labs(y = "# papers using data (avg. 2017-2019)", 
+#        x = "SPI Pillar 4 (avg. 2017-2019)",
+#        colour = NULL) +
+#   guides(colour = guide_legend(nrow = 2, title.position = "top", title.hjust = 0.5)) +
+#   theme_bw() +
+#   theme(legend.position = "bottom", legend.title = element_blank())  + 
+#   labs(caption = "Red lines indicate median values.")
+# path <- paste0(dirname(getwd()),"/02_programs/figures/country_classification_desertsoceans_region.png")
+# ggsave(path, width = 9, height = 8.1)
 
-# Generate scatter plot
-ggplot(df_plot, aes(x = SPI.INDEX.PIL2.4.5_3yr, y = data_use_reg_adjusted_3yr)) +
+# Generate scatter plot income
+ggplot(df_plot, aes(x = SPI.INDEX.PIL4_3yr, y = data_papers_3yr)) +
   geom_point(aes(colour = income_level)) +
   geom_text_repel(aes(label = iso3c)) +
   geom_vline(xintercept = median_x, linetype="dashed", color = "red") +
   geom_hline(yintercept = median_y, linetype="dashed", color = "red") +
   geom_richtext(aes(x = min_x, y = min_y, label = "<b>Deserts: <br>low data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
-  geom_richtext(aes(x = max_x, y = (max_y+0.1), label = "<b>Oceans: <br>high data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +  
+  geom_richtext(aes(x = max_x, y = (max_y+200), label = "<b>Lakes: <br>high data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +  
   geom_richtext(aes(x = max_x, y = min_y, label = "<b>Swamps: <br>high data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
-  geom_richtext(aes(x = min_x, y = (max_y+0.1), label = "<b>Oases: <br>low data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +
-  scale_x_continuous(expand = expansion(mult = c(0.1, 0.12))) +
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.12))) +
-  labs(y = "Regression adjusted # papers using data (avg. 2018-2020)", 
-       x = "SPI Pillars 2, 4, 5 (avg. 2018-2020)",
-       colour = NULL) + 
-  theme_bw() +
+  geom_richtext(aes(x = min_x, y = (max_y+100), label = "<b>Oases: <br>low data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +
+  scale_x_continuous(expand = expansion(mult = c(0.2, 0.2))) +
+  scale_y_log10(labels=scales::comma,
+                expand = expansion(mult = c(0.2, .2))) +
+  labs(y = "# papers using data (avg. 2017-2019)", 
+       x = "SPI Pillar 4 (avg. 2017-2019)",
+       colour = NULL) +
   guides(colour = guide_legend(nrow = 1, title.position = "top", title.hjust = 0.5)) +
+  theme_bw() +
   theme(legend.position = "bottom", legend.title = element_blank())  + 
-  labs(caption = "Red lines indicate median values.") 
+  labs(caption = "Red lines indicate median values.")
 path <- paste0(dirname(getwd()),"/02_programs/figures/country_classification_desertsoceans_income.png")
 ggsave(path, width = 9, height = 8.1)
 
+# Scatter plot - qual papers - region
+# ggplot(df_plot, aes(x = SPI.INDEX.PIL4_3yr, y = data_use_reg_adjusted_3yr_v2)) +
+#   geom_point(aes(colour = region)) +
+#   geom_text_repel(aes(label = iso3c)) +
+#   geom_vline(xintercept = median_x_v2, linetype="dashed", color = "red") +
+#   geom_hline(yintercept = median_y_v2, linetype="dashed", color = "red") +
+#   geom_richtext(aes(x = min_x, y = min_y_v2, label = "<b>Deserts: <br>low data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
+#   geom_richtext(aes(x = max_x, y = (max_y_v2+0.1), label = "<b>Lakes: <br>high data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +  
+#   geom_richtext(aes(x = max_x, y = min_y_v2, label = "<b>Swamps: <br>high data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
+#   geom_richtext(aes(x = min_x, y = (max_y_v2+0.1), label = "<b>Oases: <br>low data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +
+#   scale_x_continuous(expand = expansion(mult = c(0.2, 0.2))) +
+#   scale_y_continuous(expand = expansion(mult = c(0.2, 0.2))) +
+#   labs(y = "Regression adjusted # papers using data (avg. 2017-2019)", 
+#        x = "SPI Pillar 4 (avg. 2017-2019)",
+#        colour = NULL) +
+#   guides(colour = guide_legend(nrow = 2, title.position = "top", title.hjust = 0.5)) +
+#   theme_bw() +
+#   theme(legend.position = "bottom", legend.title = element_blank())  + 
+#   labs(caption = "Red lines indicate median values.")
+# path <- paste0(dirname(getwd()),"/02_programs/figures/country_classification_desertsoceans_region_v2.png")
+# ggsave(path, width = 9, height = 8.1)
+
+# GScatter plot - qual papers - income
+ggplot(df_plot, aes(x = SPI.INDEX.PIL4_3yr, y = data_use_reg_adjusted_3yr_v2)) +
+  geom_point(aes(colour = income_level)) +
+  geom_text_repel(aes(label = iso3c)) +
+  geom_vline(xintercept = median_x, linetype="dashed", color = "red") +
+  geom_hline(yintercept = median_y_v2, linetype="dashed", color = "red") +
+  geom_richtext(aes(x = min_x, y = min_y_v2, label = "<b>Deserts: <br>low data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
+  geom_richtext(aes(x = max_x, y = (max_y_v2+0.1), label = "<b>Lakes: <br>high data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +  
+  geom_richtext(aes(x = max_x, y = min_y_v2, label = "<b>Swamps: <br>high data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
+  geom_richtext(aes(x = min_x, y = (max_y_v2+0.1), label = "<b>Oases: <br>low data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +
+  scale_x_continuous(expand = expansion(mult = c(0.2, .2))) +
+  scale_y_continuous(expand = expansion(mult = c(0.2, 0.2))) +
+  labs(y = "Regression adjusted # papers using data (avg. 2017-2019)", 
+       x = "SPI Pillar 4 (avg. 2017-2019)",
+       colour = NULL) +
+  guides(colour = guide_legend(nrow = 1, title.position = "top", title.hjust = 0.5)) + 
+  theme_bw() +
+  theme(legend.position = "bottom", legend.title = element_blank())  + 
+  labs(caption = "Red lines indicate median values.")
+path <- paste0(dirname(getwd()),"/02_programs/figures/country_classification_desertsoceans_income_v2.png")
+ggsave(path, width = 9, height = 8.1)
+
+
+
+
   # Classify each country
 df_plot <- df_plot %>%
-  mutate(category = ifelse(SPI.INDEX.PIL2.4.5_3yr <= median_x & data_use_reg_adjusted_3yr <= median_y, "Desert",
-                           ifelse(SPI.INDEX.PIL2.4.5_3yr > median_x & data_use_reg_adjusted_3yr <= median_y, "Swamp",
-                                  ifelse(SPI.INDEX.PIL2.4.5_3yr <= median_x & data_use_reg_adjusted_3yr > median_y, "Oasis",
-                                         "Ocean")))) %>%
+  mutate(category = ifelse(SPI.INDEX.PIL4_3yr <= median_x & data_papers_3yr <= median_y, "Desert",
+                           ifelse(SPI.INDEX.PIL4_3yr > median_x & data_papers_3yr <= median_y, "Swamp",
+                                  ifelse(SPI.INDEX.PIL4_3yr <= median_x & data_papers_3yr > median_y_v2, "Oasis",
+                                         "Lake")))) %>%
+  mutate(category_adj = ifelse(SPI.INDEX.PIL4_3yr <= median_x & data_use_reg_adjusted_3yr_v2 <= median_y_v2, "Desert",
+                           ifelse(SPI.INDEX.PIL4_3yr > median_x & data_use_reg_adjusted_3yr_v2 <= median_y_v2, "Swamp",
+                                  ifelse(SPI.INDEX.PIL4_3yr <= median_x & data_use_reg_adjusted_3yr_v2 > median_y_v2, "Oasis",
+                                         "Lake")))) %>%
+mutate(category_adj_both = ifelse(SPI.INDEX.PIL4_3yr_reg_adjusted_3yr_v2 <= median_x_v2 & data_use_reg_adjusted_3yr_v2 <= median_y_v2, "Desert",
+                           ifelse(SPI.INDEX.PIL4_3yr_reg_adjusted_3yr_v2 > median_x_v2 & data_use_reg_adjusted_3yr_v2 <= median_y_v2, "Swamp",
+                                  ifelse(SPI.INDEX.PIL4_3yr_reg_adjusted_3yr_v2 <= median_x_v2 & data_use_reg_adjusted_3yr_v2 > median_y_v2, "Oasis",
+                                         "Lake")))) %>%  
   arrange(category,iso3c)
 
 # Export df_plot to a CSV file
@@ -2075,59 +2119,77 @@ write.csv(df_plot, path, row.names = FALSE)
 
 ```
 
-
-```{r}
-
-
-# Calculate median values
-median_x <- median(df_plot$SPI.INDEX.PIL4_3yr, na.rm = TRUE)
-median_y <- median(df_plot$data_use_reg_adjusted_3yr, na.rm = TRUE)
-median_spi2 <- median(df_plot$SPI.INDEX.PIL2_3yr, na.rm = TRUE)
-
-# Update data frame with new variable for quintiles
-df_plot <- df_plot %>%
-  ungroup() %>%
-  mutate(spi_quintiles = ntile(SPI.INDEX.PIL2_3yr, 5))
-
-# Remove outliers
-df_plot_outl <- df_plot %>%
-  filter(!(iso3c %in% c("LBY", "TKM")))
-
-# For labels 
-min_y <- min(df_plot_outl$data_use_reg_adjusted_3yr, na.rm = T)
-max_y <- max(df_plot_outl$data_use_reg_adjusted_3yr, na.rm = T)
-min_x <- min(df_plot_outl$SPI.INDEX.PIL4_3yr, na.rm = T)
-max_x <- max(df_plot_outl$SPI.INDEX.PIL4_3yr, na.rm = T)
-
-# Generate scatter plot
-ggplot(df_plot, aes(x = SPI.INDEX.PIL4_3yr, y = data_use_reg_adjusted_3yr)) +
-  geom_point(aes(colour = factor(spi_quintiles))) +
-  geom_text_repel(aes(label = iso3c)) +
-  geom_vline(xintercept = median_x, linetype="dashed", color = "red") +
-  geom_hline(yintercept = median_y, linetype="dashed", color = "red") +
-  geom_richtext(aes(x = min_x, y = min_y, label = "<b>Deserts: <br>low data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
-  geom_richtext(aes(x = max_x, y = (max_y+0.1), label = "<b>Oceans: <br>high data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +  
-  geom_richtext(aes(x = max_x, y = min_y, label = "<b>Swamps: <br>high data supply, <br>little data research</b>"), fill = "lightblue", alpha = 0.8) +  
-  geom_richtext(aes(x = min_x, y = (max_y+0.1), label = "<b>Oases: <br>low data supply, <br>high data research</b>"), fill = "lightblue", alpha = 0.8) +
-  scale_x_continuous(expand = expansion(mult = c(0.1, 0.12))) +
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.12))) +
-  scale_color_manual(values = c("1" = "darkred", "2" = "red", "3" = "gray", "4" = "blue", "5" = "navy"), 
-                     name = "SPI Pillar 2 - Data Services Quintiles (avg. 2018-2020)") +
-  labs(y = "Regression adjusted # papers using data (avg. 2018-2020)", 
-       x = "SPI Pillar 4 - Data Sources (avg. 2018-2020)") + 
-  theme_bw() +
-  theme(legend.position = "bottom") + 
-  labs(caption = "Red lines indicate median values.")
-
-path <- paste0(dirname(getwd()),"/02_programs/figures/country_classification_desertsoceans_pil2.png")
-ggsave(path, width = 9, height = 8.1)
-
-
-```
+Fig. Classifications based on Unadjusted # of Papers (avg. 2017-2019)
 
 ```{r}
 #map of deserts oceans
+ #set color pallete
+  col_pal <- c("#023047","#219ebc","#ffb703","#fb8500")  
+  names(col_pal) <- c("Lake","Oasis","Swamp","Desert" ) 
+  
+   p1 <- ggplot() +
+    geom_map(data = df_plot, aes(map_id = iso3c, fill = category), map = maps$countries) + 
+    geom_polygon(data = maps$disputed, aes(long, lat, group = group, map_id = id), fill = "grey80") + 
+    geom_polygon(data = maps$lakes, aes(long, lat, group = group), fill = "white")  +
+     geom_path(data = maps$boundaries,
+               aes(long, lat, group = group),
+               color = "white",
+               size = 0.3,
+               lineend = maps$boundaries$lineend,
+              linetype = maps$boundaries$linetype) +
+    scale_x_continuous(expand = c(0, 0), limits = standard_crop_wintri()$xlim) +
+    scale_y_continuous(expand = c(0, 0), limits = standard_crop_wintri()$ylim) +
+    scale_fill_manual(
+      name='Classification',
+      values=col_pal,
+      na.value='grey'
+    ) +
+    coord_equal() +
+    theme_map(base_size=12) +
+    labs(
+      #title=str_wrap(title,100),
+      caption = 'Source: SPI',
+      fill='Classification'
+    )
+   
+p1
+```
 
+
+Fig. Classifications based on Regression adjusted # papers using data (avg. 2017-2019)
+
+```{r}
+#map of deserts oceans
+ #set color pallete
+  col_pal <- c("#023047","#219ebc","#ffb703","#fb8500")  
+  names(col_pal) <- c("Lake","Oasis","Swamp","Desert" ) 
+  
+   p1 <- ggplot() +
+    geom_map(data = df_plot, aes(map_id = iso3c, fill = category_adj), map = maps$countries) + 
+    geom_polygon(data = maps$disputed, aes(long, lat, group = group, map_id = id), fill = "grey80") + 
+    geom_polygon(data = maps$lakes, aes(long, lat, group = group), fill = "white")  +
+     geom_path(data = maps$boundaries,
+               aes(long, lat, group = group),
+               color = "white",
+               size = 0.3,
+               lineend = maps$boundaries$lineend,
+              linetype = maps$boundaries$linetype) +
+    scale_x_continuous(expand = c(0, 0), limits = standard_crop_wintri()$xlim) +
+    scale_y_continuous(expand = c(0, 0), limits = standard_crop_wintri()$ylim) +
+    scale_fill_manual(
+      name='Classification',
+      values=col_pal,
+      na.value='grey'
+    ) +
+    coord_equal() +
+    theme_map(base_size=12) +
+    labs(
+      #title=str_wrap(title,100),
+      caption = 'Source: SPI',
+      fill='Classification'
+    )
+   
+p1
 ```
 
 
@@ -2563,7 +2625,7 @@ index_tab_df <- data_use_subjects_df %>%
   select(country, ends_with('_adjusted') ) %>%
   mutate(across(ends_with('_adjusted'),round,2)) %>%
   left_join((index_df %>% select(country, data_use_reg_adjusted_3yr))) %>%
-  select(-SPI.INDEX.PIL2.4.5_3yr_adjusted) %>%
+  #select(-SPI.INDEX.PIL2.4.5_3yr_adjusted) %>%
   select(country, data_use_reg_adjusted_3yr, everything()) %>%
   arrange(desc(data_use_reg_adjusted_3yr)) %>%
   mutate(across(ends_with('_adjusted'),
