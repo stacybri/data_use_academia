@@ -84,7 +84,7 @@ country_metadata <- wb_countries() %>%
 #read in data from AWS
 
 tictoc::tic("fst")
-articles_year_df <- s3read_using(read.fst,object='s3://data-use-academia/03_output/results_completed_updated.fst') %>%
+articles_year_df <- s3read_using(read.fst,object='s3://data-use-academia/03_output/results_completed_updated_20231003.fst') %>%
   as.data.table()
 tictoc::toc()
 
@@ -117,7 +117,7 @@ correlates_df <- wbstats::wb_data(
   left_join(read_csv(paste0(raw_data, "/SPI_Index.csv")) %>% select(iso3c, date, starts_with("SPI."))) 
   
 
-countries_list <- colnames(articles_year_df[,12:262])
+countries_list <- colnames(articles_year_df[,12:252])
 #get number of articles by country
 articles_year_country_df <- articles_year_df[,lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
 

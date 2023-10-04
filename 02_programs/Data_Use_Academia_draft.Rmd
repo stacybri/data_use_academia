@@ -50,6 +50,9 @@ s3_output <- 'https://data-use-academia.s3.amazonaws.com/03_output/'#for the big
 #share of articles that have been examined.  Will be used to estiamte total number by country
 article_share=11/100
 
+#set lower year for papers
+paper_lower_year <- 2000
+
 prim_col <- "#219ebc"
 maj_col <- "#023047"
 min_col <- "#8ecae6"
@@ -69,9 +72,13 @@ country_metadata <- wb_countries() %>%
 #read in data from AWS
 
 tictoc::tic("fst")
-articles_year_df <- s3read_using(read.fst,object='s3://data-use-academia/03_output/results_completed_updated.fst') %>%
+articles_year_df <- s3read_using(read.fst,object='s3://data-use-academia/03_output/results_completed_updated_20231003.fst') %>%
   as.data.table()
 tictoc::toc()
+
+
+
+
 
 # tictoc::tic("fst")
 # articles_year_df <- s3read_using(feather::read_feather,object='s3://data-use-academia/03_output/results_completed_updated.feather') %>%
@@ -102,7 +109,7 @@ correlates_df <- wbstats::wb_data(
   left_join(read_csv(paste0(raw_data, "/SPI_Index.csv")) %>% select(iso3c, date, starts_with("SPI."))) 
   
 
-countries_list <- colnames(articles_year_df[,12:262])
+countries_list <- colnames(articles_year_df[,27:263])
 #get number of articles by country
 articles_year_country_df <- articles_year_df[,lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
 
@@ -119,6 +126,7 @@ articles_year_country_df <- articles_year_country_df %>%
   arrange(desc(year)) %>%
   mutate(papers_estimate=papers/article_share,
          papers_estimate_3yr=rollmean(papers_estimate, k=3, align='left', fill=NA))
+
 
 #get number of articles using data by country
 articles_data_use_year_df <- articles_year_df[data_use=="Yes",lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
@@ -221,6 +229,28 @@ country_scores_aggregate_df <- country_scores_annual_df %>%
   mutate(data_papers_pcap=1000000*data_papers/SP.POP.TOTL) %>%
   select(country, iso3c, date, region, income_level, lending_type, everything())
   
+
+country_scores_recent_df <- country_scores_annual_df %>%
+  filter(between(date,paper_lower_year, 2020)) %>%
+  group_by(iso3c, region, income_level, lending_type) %>%
+  summarise(papers=sum(papers, na.rm=T),
+            papers_estimate=sum(papers_estimate, na.rm=T),
+            data_papers=sum(data_papers, na.rm=T),
+            data_papers_estimate=sum(data_papers_estimate, na.rm=T),
+            data_papers_nomed=sum(data_papers_nomed, na.rm=T),
+            data_papers_nomed_estimate=sum(data_papers_nomed_estimate, na.rm=T),
+            data_papers_Medicine=sum(data_papers_Medicine, na.rm=T),
+            data_papers_Business=sum(data_papers_Business, na.rm=T),
+            data_papers_Economics=sum(data_papers_Economics, na.rm=T),
+            data_papers_Psychology=sum(data_papers_Psychology, na.rm=T),
+            data_papers_Sociology =sum(data_papers_Sociology, na.rm=T), 
+            data_papers_Political_Science=sum(`data_papers_Political Science`, na.rm=T),
+            qual_papers=papers-data_papers) %>%
+  mutate(date=2020) %>%
+  left_join(correlates_df) %>%
+  ungroup() %>%
+  mutate(data_papers_pcap=1000000*data_papers/SP.POP.TOTL) %>%
+  select(country, iso3c, date, region, income_level, lending_type, everything())
 
 ncontry_database<-country_scores_aggregate_df %>% filter(papers>0) %>%
   nrow()
@@ -748,7 +778,7 @@ After training and validating the model, the country (or countries) of study and
 ```{r}
 mturk_cor <- cor(country_score_mturk_df$data_use_class_papers, country_score_mturk_df$data_use_mturk_papers)
 
-reg_df <- country_scores_aggregate_df %>% filter(data_papers_estimate>0)
+reg_df <- country_scores_recent_df %>% filter(data_papers_estimate>0)
 
 
 
@@ -1139,10 +1169,10 @@ p1 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=NY.GDP.PCAP.PP.KD)) +
   geom_richtext(
     aes(x = 40000, y = 30,label = eq_plot_txt(reg_df_fixedn, log(data_papers),log(NY.GDP.PCAP.PP.KD))), hjust=0.2, size=4
   ) +
-  bbc_style() +
-  labs(
-    title='GDP per capita'
-  )
+  bbc_style() 
+  # labs(
+  #   title='GDP per capita'
+  # )
 
 
 p2 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SP.POP.TOTL)) +
@@ -1156,8 +1186,8 @@ p2 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SP.POP.TOTL)) +
   geom_richtext(
     aes(x = 50000000, y = 30,label = eq_plot_txt(reg_df_fixedn, log(data_papers),log(SP.POP.TOTL))), hjust=0.2, size=4
   ) +
-  bbc_style() +
-  labs(title="Population") 
+  bbc_style() 
+  #labs(title="Population") 
 
 p3 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SPI.INDEX)) +
   geom_point() +
@@ -1170,8 +1200,8 @@ p3 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SPI.INDEX)) +
   geom_richtext(
     aes(x = 40, y = 20,label = eq_plot_txt(reg_df_fixedn, log(data_papers),SPI.INDEX)), hjust=0.2, size=4
   ) +
-  bbc_style() +
-  labs(title="SPI Overall Score") 
+  bbc_style() 
+  #labs(title="SPI Overall Score") 
 
 
 p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
@@ -1185,21 +1215,28 @@ p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
     aes(x = 40, y = 20,label = eq_plot_txt(reg_df, log(data_papers),IQ.SPI.PIL4)), hjust=0.2, size=4
   ) +
   bbc_style() +
-  labs(title="SPI Overall Score") +
+  #labs(title="SPI Overall Score") +
   theme(
     axis.title.y = element_blank()
   )
 
-(p1 / p2 / p3) +
-  plot_annotation(
-    #title='Plot of SPI overall score on Poverty Ratio and Gini Index',
-    caption='Source: All indicators come from the World Bank. NY.GDP.PCAP.PP.KD, SP.POP.TOTL & IQ.SPI.OVRL.'
-    ) +
-  theme(
-    axis.title = ggplot2::element_text(size=10),
-    title = ggplot2::element_text(size=10)
-  )
 ```
+
+```{r, fig.width=9, fig.height=5}
+
+p1
+
+```
+
+```{r, fig.width=9, fig.height=5}
+p2
+
+```
+
+```{r, fig.width=9, fig.height=5}
+p3
+```
+
 
 The table below shows OLS regression coefficients from a regression of the log number of academic papers using data on log GDP per capita, log population, and the SPI scores. Log GDP per capita, population, and the SPI overall scores are all statistically significant at conventional levels.  Log GDP per capita and Log Population combined explain close to 75% of the variation between countries in academic output.  This is based on the R-squared from the linear regression.  When the SPI overall scores are added around 76% of the variation in explained.  The regressions indicate that a 10% increase in GDP per capita is associated with a 4.4% increase in academic output using data.  A 10% increase in population is associated with a 6.2% increase in academic output.  
 
@@ -1259,7 +1296,8 @@ modelsummary(models,
               +=0.1 level",
              #gof_map = gm,
              escape = FALSE,
-             fmt = 2
+             fmt = 2,
+             output='flextable'
              )
 
 ```
@@ -1711,14 +1749,14 @@ reg_pan_extended <- reg_pan_extended %>%
   ) 
 
 source_models <- list(
-  '(1)'=feols(log(data_papers_3yr) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) + Pop.Cen | country + year  , data=reg_pan_extended),
-  '(2)'=feols(log(data_papers_3yr) ~ Ag.Cen + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
-  '(4)'=feols(log(data_papers_3yr) ~  House.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
-  '(5)'=feols(log(data_papers_3yr) ~  Ag.Svy + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
-  '(6)'=feols(log(data_papers_3yr) ~  Labr.Svy + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
-  '(7)'=feols(log(data_papers_3yr) ~ Hlth.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
-  '(8)'=feols(log(data_papers_3yr) ~  Bizz.Svy  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended),
-  '(9)'=feols(log(data_papers_3yr) ~  CRVS  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country + year , data=reg_pan_extended)
+  '(1)'=feols(log(data_papers_3yr) ~ i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) + Pop.Cen | country + year  , data=reg_pan_extended),
+  '(2)'=feols(log(data_papers_3yr) ~ Ag.Cen + i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | country + year , data=reg_pan_extended),
+  '(4)'=feols(log(data_papers_3yr) ~  House.Svy  + i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | country + year , data=reg_pan_extended),
+  '(5)'=feols(log(data_papers_3yr) ~  Ag.Svy + i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | country + year , data=reg_pan_extended),
+  '(6)'=feols(log(data_papers_3yr) ~  Labr.Svy + i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | country + year , data=reg_pan_extended),
+  '(7)'=feols(log(data_papers_3yr) ~ Hlth.Svy  + i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | country + year , data=reg_pan_extended),
+  '(8)'=feols(log(data_papers_3yr) ~  Bizz.Svy  + i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | country + year , data=reg_pan_extended),
+  '(9)'=feols(log(data_papers_3yr) ~  CRVS  + i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | country + year , data=reg_pan_extended)
   )
 
 
@@ -1873,6 +1911,7 @@ Figure. Comparison of Share of Qualitative vs SPI Overall Scores. 2000-2020.
 ```
 
 
+
 ## Deserts, Swamps, Oasis, and Oceans
 
 ```{r}
@@ -1899,7 +1938,7 @@ country_scores_annual_df <- country_scores_annual_df %>%
 #test <- country_scores_annual_df %>% filter(iso3c == "SWE")
 
 # Log data papers population and GDPpc regression adjusted
-mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD) | date,  data=country_scores_annual_df) 
+mod <- fixest::feols(log(data_papers_3yr)~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | date,  data=country_scores_annual_df) 
 country_scores_annual_df <- country_scores_annual_df %>%
   modelr::add_residuals(mod, var='data_use_reg_adjusted_3yr') 
   
@@ -1908,7 +1947,7 @@ country_scores_annual_df <- country_scores_annual_df %>%
   rowwise() %>%
   mutate(SPI.INDEX.PIL2.4.5 = mean(c(SPI.INDEX.PIL2,SPI.INDEX.PIL4,SPI.INDEX.PIL5),na.rm = T),
          SPI.INDEX.PIL2.4.5_3yr = mean(c(SPI.INDEX.PIL2_3yr,SPI.INDEX.PIL4_3yr,SPI.INDEX.PIL5_3yr),na.rm = T))
-mod <- fixest::feols(log(SPI.INDEX.PIL2.4.5_3yr)~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD) | date,
+mod <- fixest::feols(log(SPI.INDEX.PIL2.4.5_3yr)~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | date,
                      data=country_scores_annual_df) 
 country_scores_annual_df <- country_scores_annual_df %>%
   modelr::add_residuals(mod, var='SPI.INDEX.PIL2.4.5_3yr_adjusted') 
@@ -2013,10 +2052,11 @@ ggplot(df_plot, aes(x = SPI.INDEX.PIL2.4.5_3yr, y = data_use_reg_adjusted_3yr)) 
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.12))) +
   labs(y = "Regression adjusted # papers using data (avg. 2018-2020)", 
        x = "SPI Pillars 2, 4, 5 (avg. 2018-2020)",
-       colour = NULL) +
+       colour = NULL) + 
+  theme_bw() +
   guides(colour = guide_legend(nrow = 1, title.position = "top", title.hjust = 0.5)) +
   theme(legend.position = "bottom", legend.title = element_blank())  + 
-  labs(caption = "Red lines indicate median values.")
+  labs(caption = "Red lines indicate median values.") 
 path <- paste0(dirname(getwd()),"/02_programs/figures/country_classification_desertsoceans_income.png")
 ggsave(path, width = 9, height = 8.1)
 
@@ -2074,7 +2114,8 @@ ggplot(df_plot, aes(x = SPI.INDEX.PIL4_3yr, y = data_use_reg_adjusted_3yr)) +
   scale_color_manual(values = c("1" = "darkred", "2" = "red", "3" = "gray", "4" = "blue", "5" = "navy"), 
                      name = "SPI Pillar 2 - Data Services Quintiles (avg. 2018-2020)") +
   labs(y = "Regression adjusted # papers using data (avg. 2018-2020)", 
-       x = "SPI Pillar 4 - Data Sources (avg. 2018-2020)") +
+       x = "SPI Pillar 4 - Data Sources (avg. 2018-2020)") + 
+  theme_bw() +
   theme(legend.position = "bottom") + 
   labs(caption = "Red lines indicate median values.")
 
@@ -2083,6 +2124,12 @@ ggsave(path, width = 9, height = 8.1)
 
 
 ```
+
+```{r}
+#map of deserts oceans
+
+```
+
 
 ## Sensitivity Checks
 
@@ -2176,7 +2223,7 @@ data_use_df <- country_scores_annual_df %>%
 
   
 # regression adjusted
-mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD) | date,  data=data_use_df) 
+mod <- fixest::feols(log(data_papers_3yr)~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010) | date,  data=data_use_df) 
 
 data_use_df <- data_use_df %>%
   modelr::add_residuals(mod, var='data_use_reg_adjusted_3yr') 
@@ -2396,12 +2443,14 @@ data_use_subjects_df <- country_scores_annual_df %>%
     )
   )
   
+
+
 # regression adjusted
-mod1 <- fixest::feols(log(data_papers_3yr_Economics) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
-mod2 <- fixest::feols(log(data_papers_3yr_Psychology) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
-mod3 <- fixest::feols(log(data_papers_3yr_Sociology) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
-mod4 <- fixest::feols(log(`data_papers_3yr_Political Science`) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
-mod5 <- fixest::feols(log(data_papers_3yr_Medicine) ~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date , data=country_scores_annual_df) 
+mod1 <- fixest::feols(log(data_papers_3yr_Economics) ~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010)  | date , data=country_scores_annual_df) 
+mod2 <- fixest::feols(log(data_papers_3yr_Psychology) ~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010)  | date , data=country_scores_annual_df) 
+mod3 <- fixest::feols(log(data_papers_3yr_Sociology) ~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010)  | date , data=country_scores_annual_df) 
+mod4 <- fixest::feols(log(`data_papers_3yr_Political Science`) ~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010)  | date , data=country_scores_annual_df) 
+mod5 <- fixest::feols(log(data_papers_3yr_Medicine) ~  i( date,log(SP.POP.TOTL), 2010) + i(date, log(NY.GDP.PCAP.PP.KD), 2010)  | date , data=country_scores_annual_df) 
 
 data_use_subjects_df <- data_use_subjects_df %>%
   modelr::add_residuals(mod1, var='data_papers_3yr_Economics_adjusted') %>%
@@ -2419,6 +2468,9 @@ Table. Country Scores on Academic Data Use by Subject of Article.  Per capita me
 #colors
 
 col_palette <- c("#2ec4b6", "#acece7", "#f1dc76",  "#ffbf69","#ff9f1c"   )
+
+col_palette1 <- c("#2ec4b6", "#acece7", "#f1dc76","#ff9f1c"   )
+
 
 col_palette2 <- c("#2ec4b6",  "#f1dc76", "#ff9f1c" )
 
@@ -2442,20 +2494,20 @@ index_tab_df <- data_use_subjects_df %>%
         brks1 <- append(brks1,max(index_tab_df$data_papers_3yr_Economics_pcap, na.rm=T))
 
         brks2 <- quantile(index_tab_df$data_papers_3yr_Psychology_pcap, probs=c(1,2,3,4)/5,na.rm=T)
-        brks2 <- append(min(index_tab_df$data_papers_3yr_Psychology_pcap, na.rm=T),brks1)
-        brks2 <- append(brks1,max(index_tab_df$data_papers_3yr_Psychology_pcap, na.rm=T))
+        brks2 <- append(min(index_tab_df$data_papers_3yr_Psychology_pcap, na.rm=T),brks2)
+        brks2 <- append(brks2,max(index_tab_df$data_papers_3yr_Psychology_pcap, na.rm=T))
         
         brks3 <- quantile(index_tab_df$data_papers_3yr_Sociology_pcap, probs=c(1,2,3,4)/5,na.rm=T)
-        brks3 <- append(min(index_tab_df$data_papers_3yr_Sociology_pcap, na.rm=T),brks1)
-        brks3 <- append(brks1,max(index_tab_df$data_papers_3yr_Sociology_pcap, na.rm=T))
+        brks3 <- append(min(index_tab_df$data_papers_3yr_Sociology_pcap, na.rm=T),brks3)
+        brks3 <- append(brks3,max(index_tab_df$data_papers_3yr_Sociology_pcap, na.rm=T))
         
         brks4 <- quantile(index_tab_df$`data_papers_3yr_Political Science_pcap`, probs=c(1,2,3,4)/5,na.rm=T)
-        brks4 <- append(min(index_tab_df$`data_papers_3yr_Political Science_pcap`, na.rm=T),brks1)
-        brks4 <- append(brks1,max(index_tab_df$`data_papers_3yr_Political Science_pcap`, na.rm=T))
+        brks4 <- append(min(index_tab_df$`data_papers_3yr_Political Science_pcap`, na.rm=T),brks4)
+        brks4 <- append(brks4,max(index_tab_df$`data_papers_3yr_Political Science_pcap`, na.rm=T))
         
         brks5 <- quantile(index_tab_df$data_papers_3yr_Medicine_pcap, probs=c(1,2,3,4)/5,na.rm=T)
-        brks5 <- append(min(index_tab_df$data_papers_3yr_Medicine_pcap, na.rm=T),brks1)
-        brks5 <- append(brks1,max(index_tab_df$data_papers_3yr_Medicine_pcap, na.rm=T))
+        brks5 <- append(min(index_tab_df$data_papers_3yr_Medicine_pcap, na.rm=T),brks5)
+        brks5 <- append(brks5,max(index_tab_df$data_papers_3yr_Medicine_pcap, na.rm=T))
         
 
 
@@ -2477,13 +2529,13 @@ index_tab_df <- data_use_subjects_df %>%
           bg(j = c('data_use_pcap_3yr'),
              bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks, reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Economics_pcap'),
-             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks1, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette1, domain=c(0,1000), bins=brks1[2:6], reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Psychology_pcap'),
-             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks2, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette2, domain=c(0,1000), bins=brks2[2:6], reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Sociology_pcap'),
-             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks3, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette2, domain=c(0,1000), bins=brks3[3:6], reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Political Science_pcap'),
-             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks4, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette1, domain=c(0,1000), bins=brks4[2:6], reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Medicine_pcap'),
              bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks5, reverse=TRUE)) 
 
@@ -2499,6 +2551,9 @@ Table. Country Scores on Academic Data Use by Subject of Article.  Regression Ad
 
 col_palette <- c("#2ec4b6", "#acece7", "#f1dc76",  "#ffbf69","#ff9f1c"   )
 
+col_palette1 <- c("#2ec4b6", "#acece7",  "#f1dc76", "#ff9f1c" )
+
+
 col_palette2 <- c("#2ec4b6",  "#f1dc76", "#ff9f1c" )
 
 #make the table
@@ -2508,10 +2563,17 @@ index_tab_df <- data_use_subjects_df %>%
   select(country, ends_with('_adjusted') ) %>%
   mutate(across(ends_with('_adjusted'),round,2)) %>%
   left_join((index_df %>% select(country, data_use_reg_adjusted_3yr))) %>%
+  select(-SPI.INDEX.PIL2.4.5_3yr_adjusted) %>%
   select(country, data_use_reg_adjusted_3yr, everything()) %>%
-  arrange(desc(data_use_reg_adjusted_3yr))
+  arrange(desc(data_use_reg_adjusted_3yr)) %>%
+  mutate(across(ends_with('_adjusted'),
+                ~if_else(.==-Inf,as.numeric(NA),as.numeric(.))
+                ))
 
  #calculate the breaks for the color coding
+
+
+
         brks <- quantile(index_tab_df$data_use_reg_adjusted_3yr, probs=c(1,2,3,4)/5,na.rm=T)
         brks <- append(min(index_tab_df$data_use_reg_adjusted_3yr, na.rm=T),brks)
         brks <- append(brks,max(index_tab_df$data_use_reg_adjusted_3yr, na.rm=T))
@@ -2521,20 +2583,20 @@ index_tab_df <- data_use_subjects_df %>%
         brks1 <- append(brks1,max(index_tab_df$data_papers_3yr_Economics_adjusted, na.rm=T))
 
         brks2 <- quantile(index_tab_df$data_papers_3yr_Psychology_adjusted, probs=c(1,2,3,4)/5,na.rm=T)
-        brks2 <- append(min(index_tab_df$data_papers_3yr_Psychology_adjusted, na.rm=T),brks1)
-        brks2 <- append(brks1,max(index_tab_df$data_papers_3yr_Psychology_adjusted, na.rm=T))
+        brks2 <- append(min(index_tab_df$data_papers_3yr_Psychology_adjusted, na.rm=T),brks2)
+        brks2 <- append(brks2,max(index_tab_df$data_papers_3yr_Psychology_adjusted, na.rm=T))
         
         brks3 <- quantile(index_tab_df$data_papers_3yr_Sociology_adjusted, probs=c(1,2,3,4)/5,na.rm=T)
-        brks3 <- append(min(index_tab_df$data_papers_3yr_Sociology_adjusted, na.rm=T),brks1)
-        brks3 <- append(brks1,max(index_tab_df$data_papers_3yr_Sociology_adjusted, na.rm=T))
+        brks3 <- append(min(index_tab_df$data_papers_3yr_Sociology_adjusted, na.rm=T),brks3)
+        brks3 <- append(brks3,max(index_tab_df$data_papers_3yr_Sociology_adjusted, na.rm=T))
         
         brks4 <- quantile(index_tab_df$`data_papers_3yr_Political_Science_adjusted`, probs=c(1,2,3,4)/5,na.rm=T)
-        brks4 <- append(min(index_tab_df$`data_papers_3yr_Political_Science_adjusted`, na.rm=T),brks1)
-        brks4 <- append(brks1,max(index_tab_df$`data_papers_3yr_Political_Science_adjusted`, na.rm=T))
+        brks4 <- append(min(index_tab_df$`data_papers_3yr_Political_Science_adjusted`, na.rm=T),brks4)
+        brks4 <- append(brks4,max(index_tab_df$`data_papers_3yr_Political_Science_adjusted`, na.rm=T))
         
         brks5 <- quantile(index_tab_df$data_papers_3yr_Medicine_adjusted, probs=c(1,2,3,4)/5,na.rm=T)
-        brks5 <- append(min(index_tab_df$data_papers_3yr_Medicine_adjusted, na.rm=T),brks1)
-        brks5 <- append(brks1,max(index_tab_df$data_papers_3yr_Medicine_adjusted, na.rm=T))
+        brks5 <- append(min(index_tab_df$data_papers_3yr_Medicine_adjusted, na.rm=T),brks5)
+        brks5 <- append(brks5,max(index_tab_df$data_papers_3yr_Medicine_adjusted, na.rm=T))
         
 
 
@@ -2558,11 +2620,11 @@ index_tab_df <- data_use_subjects_df %>%
           bg(j = c('data_papers_3yr_Economics_adjusted'),
              bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks1, reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Psychology_adjusted'),
-             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks2, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette1, domain=c(0,1000), bins=brks2[2:6], reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Sociology_adjusted'),
-             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks3, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette1, domain=c(0,1000), bins=brks3[2:6], reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Political_Science_adjusted'),
-             bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks4, reverse=TRUE)) %>%
+             bg = scales::col_bin(col_palette1, domain=c(0,1000), bins=brks4[2:6], reverse=TRUE)) %>%
           bg(j = c('data_papers_3yr_Medicine_adjusted'),
              bg = scales::col_bin(col_palette, domain=c(0,1000), bins=brks5, reverse=TRUE)) 
 
