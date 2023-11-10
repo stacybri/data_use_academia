@@ -213,6 +213,7 @@ country_scores_annual_df <- articles_year_country_df %>%
   select(-country) %>%
   left_join(correlates_df) 
 
+write_excel_csv(country_scores_annual_df, here(output, "data_use_country_scores_annual.csv"))
 
 
 country_scores_2019_df <- country_scores_annual_df %>%
