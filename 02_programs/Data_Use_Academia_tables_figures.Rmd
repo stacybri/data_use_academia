@@ -5,7 +5,6 @@ date: "`r Sys.Date()`"
 output:
   word_document: 
     number_sections: true
-bibliography: bibliography.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -44,6 +43,7 @@ library(GGally)
 
 set.seed(354623)
 
+#set paths
 dir <- here()
 raw_data <- paste0(dir, "/01_raw_data/")
 output <- paste0(dir, "/03_output/")
@@ -66,63 +66,32 @@ min_col <- "#8ecae6"
 
 
 ```{r countryscore, include=FALSE}
+
 #read in world bank country metadata
 country_metadata <- wb_countries() %>%
   filter(region!="Aggregates")
 
-#articles_year_df <- fread(paste0(s3_output, "results_completed_updated.csv")) 
 
-#read in data from AWS
-
+#read in data containing classified set of articles
+#file is saved as .fst format for faster reading
 tictoc::tic("fst")
 articles_year_df <- s3read_using(read.fst,object='s3://data-use-academia/03_output/results_completed_updated_20231003.fst') %>%
-  as.data.table()
+  as.data.table() %>%
+  # arrange columns so that "paper_id" "title" "abstract"   "year" "doi" "venue" "journal"  "mag_field_of_study"  "group_name" "data_use" "outbound_citations" "inbound_citations "places"   "countries" come first then everything
+  select(paper_id, title, abstract, year, doi, venue, journal, mag_field_of_study, group_name, data_use, outbound_citations, inbound_citations, places, countries, everything()) 
 tictoc::toc()
 
 
-
-
-
-# tictoc::tic("fst")
-# articles_year_df <- s3read_using(feather::read_feather,object='s3://data-use-academia/03_output/results_completed_updated.feather') %>%
-#   as.data.table()
-# tictoc::toc()
-
-correlate <- c("SP.POP.TOTL","NY.GDP.MKTP.PP.KD",'IQ.SPI.OVRL','NY.GDP.PCAP.PP.KD',
-              'IQ.SPI.PIL1','IQ.SPI.PIL2','IQ.SPI.PIL3',
-              'IQ.SPI.PIL4','IQ.SPI.PIL5',
-              'IQ.SCI.OVRL','NV.IND.MANF.ZS', 'NV.AGR.TOTL.ZS','NE.TRD.GNFS.ZS', 'HD.HCI.OVRL', 'HD.HCI.LAYS',
-              'SE.PRM.ENRR','BN.CAB.XOKA.GD.ZS', 'CC.EST', "GE.EST", 'PV.EST', "RQ.EST", "RL.EST", 
-              "VA.EST", "BX.KLT.DINV.WD.GD.ZS", "SI.POV.DDAY", "SI.POV.GINI",'SE.TER.CUAT.MS.ZS','SE.TER.ENRR')
-
-# correlates_df <- wbstats::wb_data(
-#   indicator=correlate,
-#   country = 'countries_only',
-#   start_date=2000,
-#   end_date=2020
-#   ) %>%
-#   group_by(iso3c) %>%
-#   mutate(across(correlate,
-#                 ~if_else(is.na(.),1,0),
-#                 .names="{.col}_imp_tag")) %>% #add tag for data that is imputed
-#   fill(correlate, .direction="downup") %>%
-#   #manual fix for vietnam which changed the name
-#   filter(!(country %in% c("Vietnam", "Turkey", "Czech Republic"))) %>%
-#   mutate(WGI.OVL=(CC.EST + GE.EST + PV.EST + RQ.EST + RL.EST + VA.EST)/6
-#          )  %>%
-#   ungroup()  %>%
-#   left_join(read_csv(paste0(raw_data, "/SPI_index.csv")) %>% select(iso3c, date, starts_with("SPI.")))
-
-#write to excel
-# write_excel_csv(correlates_df,
-#                 paste0(raw_data, "/correlates_df.csv"))
-
+#read in indicators from the WDI for regression analysis
 correlates_df <- read_csv(paste0(raw_data, "/correlates_df.csv"))
 
-countries_list <- colnames(articles_year_df[,27:263])
-#get number of articles by country
+#get a list of the columns names in the file
+countries_list <- colnames(articles_year_df[,16:263])
+
+#get number of articles by country. Both using data and not using data
 articles_year_country_df <- articles_year_df[,lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
 
+#reshape the file long
 articles_year_country_df <- articles_year_country_df %>% 
   as_tibble() %>%
   pivot_longer(
@@ -141,6 +110,7 @@ articles_year_country_df <- articles_year_country_df %>%
 #get number of articles using data by country
 articles_data_use_year_df <- articles_year_df[data_use=="Yes",lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
 
+#pivot longer
 articles_data_use_year_df <- articles_data_use_year_df %>% 
   as_tibble() %>%
   pivot_longer(
@@ -161,6 +131,7 @@ articles_data_use_year_df <- articles_data_use_year_df %>%
 #get number of articles using data by country
 articles_data_use_year_restrict_df <- articles_year_df[data_use=="Yes" & group_name!='Medicine',lapply(.SD, sum, na.rm=TRUE), by=year, .SDcols=countries_list]
 
+#pivot longer
 articles_data_use_year_restrict_df <- articles_data_use_year_restrict_df %>% 
   as_tibble() %>%
   pivot_longer(
@@ -180,6 +151,7 @@ articles_data_use_year_restrict_df <- articles_data_use_year_restrict_df %>%
 #get number of articles using data by country and subject
 articles_data_use_year_subject_df <- articles_year_df[data_use=="Yes",lapply(.SD, sum, na.rm=TRUE), by=c('year','group_name'), .SDcols=countries_list]
 
+#pivot longer
 articles_data_use_year_subject_df <- articles_data_use_year_subject_df %>% 
   as_tibble() %>%
   pivot_longer(
@@ -203,7 +175,7 @@ articles_data_use_year_subject_df <- articles_data_use_year_subject_df %>%
   )
 
 
-
+#combine the total number of papers under different specificiations into one file
 country_scores_annual_df <- articles_year_country_df %>%
   left_join(articles_data_use_year_df)  %>%
   left_join(articles_data_use_year_restrict_df) %>%
@@ -213,12 +185,15 @@ country_scores_annual_df <- articles_year_country_df %>%
   select(-country) %>%
   left_join(correlates_df) 
 
+#export annual numbers of articles using data
 write_excel_csv(country_scores_annual_df, here(output, "data_use_country_scores_annual.csv"))
 
 
+#get numbers just for 2019
 country_scores_2019_df <- country_scores_annual_df %>%
   filter(date==2019)
 
+# get numbers across all years
 country_scores_aggregate_df <- country_scores_annual_df %>%
   group_by(iso3c, region, income_level, lending_type) %>%
   summarise(papers=sum(papers, na.rm=T),
@@ -241,6 +216,7 @@ country_scores_aggregate_df <- country_scores_annual_df %>%
   select(country, iso3c, date, region, income_level, lending_type, everything())
   
 
+#get numbers in a recent window
 country_scores_recent_df <- country_scores_annual_df %>%
   filter(between(date,paper_lower_year, 2019)) %>%
   group_by(iso3c, region, income_level, lending_type) %>%
@@ -263,26 +239,14 @@ country_scores_recent_df <- country_scores_annual_df %>%
   mutate(data_papers_pcap=1000000*data_papers/SP.POP.TOTL) %>%
   select(country, iso3c, date, region, income_level, lending_type, everything())
 
-ncontry_database<-country_scores_aggregate_df %>% filter(papers>0) %>%
-  nrow()
 
-not_found <- country_scores_aggregate_df %>%
-  filter(papers==0 | is.na(papers)) %>%
-  filter(region!="Aggregates") %>%
-  pull(country)
+
 ```
 
 ```{r mturkdata, include=FALSE}
 
-
-
-
-
 # #read in country scores based on collapsing articles in mturk
 # #This file was produced in the classifications_compare.ipynb in the 02_programs/misc file.
-# country_score_mturk_df <- read_csv(paste0(output, "mturk_country_scores.csv")) %>%
-#   rename(iso3c=index) %>%
-#   left_join(country_metadata) 
 
 #read in articles in the training set
 training_df <- read_csv(paste0(raw_data,"/train_doc_wcounts.csv")) %>%
@@ -298,7 +262,7 @@ testing_df <- read_csv(paste0(raw_data,"/test_doc_wcounts.csv")) %>%
 
 ############
 # read in all mturk articles
-mturk_articles_df <- read_csv(paste0(output,'/mturk_article_classifications.csv')) %>%
+mturk_articles_df <- read_csv(paste0(raw_data,'/mturk_article_classifications.csv')) %>%
   as.data.table() %>%
   distinct(paper_id, .keep_all=TRUE) %>%
   left_join(articles_year_df[,.(paper_id, data_use)] ) %>%
@@ -312,9 +276,6 @@ mturk_articles_df <- read_csv(paste0(output,'/mturk_article_classifications.csv'
 
 
 
-# mturk_articles_df %>%
-#   group_by(data_use) %>% 
-#   summarise(n=n())
 
 countries_list <- colnames(mturk_articles_df[,19:156])
 #get number of articles by country using mturk classifier
@@ -593,53 +554,6 @@ print(p1)
 
 
 
-```{r rows}
-#calculate number of countries
-mturk_cntry_num <- nrow(country_score_mturk_df)
-cntry_num <- nrow(country_scores_2019_df)
-
-#calculate number of articles
-article_num <- nrow(articles_year_df)
-```
-
-
-
-
-
-```{r mturk}
-
-#read in mturk submissions data
-file_names <- list.files(paste0(raw_data, "/classification_set/"), full.names = FALSE) #where you have your files
-
-
-
-if (exists('mturk_df')) {
-  remove(mturk_df)
-}
-
-for (i in file_names) {
-  temp <- read_csv(paste0(raw_data, "/classification_set/",i)) %>%
-    mutate(MaxAssignments=as.numeric(MaxAssignments),
-           AssignmentDurationInSeconds=as.numeric(AssignmentDurationInSeconds),
-           AutoApprovalDelayInSeconds=as.numeric(AutoApprovalDelayInSeconds),
-           WorkTimeInSeconds=as.numeric(WorkTimeInSeconds))
-  
-  if (!exists('mturk_df')) {
-  mturk_df <- temp
-  } else {
-    mturk_df <- mturk_df %>%
-      bind_rows(temp)
-  }
-}
-
-raters <- length(unique(mturk_df$WorkerId))
-
-work_time_mn <- median(mturk_df$WorkTimeInSeconds)/60
-
-
-
-```
-
 # Main Tables and Figures
 
 ## Table 1. Summary Statistics of Article Corpus. 2000-2020 
@@ -649,10 +563,10 @@ work_time_mn <- median(mturk_df$WorkTimeInSeconds)/60
 sumstats_tab <- articles_year_df %>%
   transmute(
     `Year of Publication`=year,
-    `Published in Journal (1=yes)`=as.numeric(journal==""),
+    `Published in Journal (1=yes)`=as.numeric(journal!=""),
     Field=group_name,
     `Data Use (1=yes)`=as.numeric(data_use=="Yes"),
-    `Country Identified (1=yes)`=if_else(nf==1,0,1)
+    `Country Identified (1=yes)`=if_else(nf==1,0,1,0)
   ) %>%
   group_by(Field) %>%
   summarise(across(c('Published in Journal (1=yes)','Data Use (1=yes)','Country Identified (1=yes)'),~round(mean(.),2)),
@@ -796,7 +710,6 @@ plt_df <- plt_df %>%
 
 ```{r, fig.width=8, fig.height=12}
 
-#cor(reg_df$NY.GDP.MKTP.PP.KD, reg_df$papers_estimate, use='pairwise.complete.obs')
 reg_df_fixedn <- reg_df %>%
   filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL) | is.na(SPI.INDEX))) 
 
@@ -812,9 +725,6 @@ p1 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=NY.GDP.PCAP.PP.KD)) +
     aes(x = 40000, y = 30,label = eq_plot_txt(reg_df_fixedn, log(data_papers),log(NY.GDP.PCAP.PP.KD))), hjust=0.2, size=4
   ) +
   bbc_style() 
-  # labs(
-  #   title='GDP per capita'
-  # )
 
 
 p2 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SP.POP.TOTL)) +
@@ -829,12 +739,10 @@ p2 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SP.POP.TOTL)) +
     aes(x = 50000000, y = 30,label = eq_plot_txt(reg_df_fixedn, log(data_papers),log(SP.POP.TOTL))), hjust=0.2, size=4
   ) +
   bbc_style() 
-  #labs(title="Population") 
 
 p3 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SPI.INDEX)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
-  #scale_x_log10(labels=scales::comma) +
   scale_y_log10(labels=scales::comma) +
   xlab("SPI Overall Score") +
   ylab('Number of Papers using Data') +
@@ -843,13 +751,11 @@ p3 <- ggplot(reg_df_fixedn, aes(y=data_papers, x=SPI.INDEX)) +
     aes(x = 40, y = 20,label = eq_plot_txt(reg_df_fixedn, log(data_papers),SPI.INDEX)), hjust=0.2, size=4
   ) +
   bbc_style() 
-  #labs(title="SPI Overall Score") 
 
 
 p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
-  #scale_x_log10(labels=scales::comma) +
   scale_y_log10(labels=scales::comma) +
   xlab("SPI Overall Score") +
   geom_smooth(method = "lm") +
@@ -857,7 +763,6 @@ p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
     aes(x = 40, y = 20,label = eq_plot_txt(reg_df, log(data_papers),IQ.SPI.PIL4)), hjust=0.2, size=4
   ) +
   bbc_style() +
-  #labs(title="SPI Overall Score") +
   theme(
     axis.title.y = element_blank()
   )
@@ -893,16 +798,11 @@ p3
 
 
 models <- list(
-  #'(1)'=feols(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD), data=reg_df_fixedn, se='hetero') ,
-  #'(2)'=feols(log(data_papers) ~ log(SP.POP.TOTL), data=reg_df_fixedn, se='hetero') ,  
-  #'(3)'=feols(log(data_papers) ~ SPI.INDEX, data=reg_df_fixedn, se='hetero') ,  
-  #'(4)'=lm_robust(log(data_papers) ~ SPI.INDEX, data=reg_df_fixedn) ,  
+
   '(1)'=feols(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn, se='hetero'),
   '(2)'=feols(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn, se='hetero'),
   '(3)'=feols(log(data_papers) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) + log(qual_papers+1) , data=reg_df_fixedn, se='hetero'),
-  #'(6)'=lm_robust(log(data_papers) ~ SPI.INDEX + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 , data=reg_df_fixedn) ,  
   '(4)'=feols(log(data_papers) ~   SPI.INDEX.PIL4  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) + log(qual_papers+1) , data=reg_df_fixedn, se='hetero')
-  # '(6)'=lm_robust(log(data_papers) ~ SPI.D4.1.1.POPU + SPI.D4.1.2.AGRI + SPI.D4.1.3.BIZZ + SPI.D4.1.4.HOUS + SPI.D4.1.5.AGSVY + SPI.D4.1.6.LABR + SPI.D4.1.7.HLTH + SPI.D4.1.8.BZSVY +  SPI.D4.2.3.CRVS + SPI.D4.3.GEO.first.admin.level + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) , data=reg_df_fixedn) 
   )
 
 modelsummary(models,
@@ -943,7 +843,6 @@ modelsummary(models,
               **=0.01 level
               *=0.05 level
               +=0.1 level",
-             #gof_map = gm,
              escape = FALSE,
              fmt = 2,
              output='flextable'
@@ -1118,7 +1017,6 @@ country_scores_annual_df <- country_scores_annual_df %>%
     SP.POP.TOTL_3yr = rollmean(SP.POP.TOTL, k=3, align='left', fill=NA),
     data_papers_pcap_3yr=10^6*data_papers_3yr/SP.POP.TOTL_3yr
   ) 
-#test <- country_scores_annual_df %>% filter(iso3c == "SWE")
 
 # SPI Pillars 2 (Data Services), 4 (Data Sources), 5 (Data Infrastructure) 
 country_scores_annual_df <- country_scores_annual_df %>%
@@ -1144,7 +1042,6 @@ df_plot <- country_scores_annual_df %>%
 
 
 # Log data papers population and GDPpc regression adjusted
-# mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL) + log(NY.GDP.PCAP.PP.KD)  | date,  data=country_scores_annual_df) 
 mod <- fixest::feols(log(data_papers_3yr)~  log(SP.POP.TOTL_3yr) + log(NY.GDP.PCAP.PP.KD_3yr),  data=df_plot)
 df_plot <- df_plot %>%
   modelr::add_residuals(mod, var='data_use_reg_adjusted_3yr') 
@@ -1244,13 +1141,12 @@ b) Map
 
 ```{r}
 #map of deserts oceans
- #set color pallete
 
 map_df <- df_plot %>%
   right_join(country_metadata)%>%
   mutate(category_adj=if_else(is.na(category_adj), as.character(NA), as.character(category_adj))) 
 
-
+ #set color pallete
   col_pal <- c("#023047","#219ebc","#ffb703","#fb8500")  
   names(col_pal) <- c("Data Lake","Data Oasis","Data Swamp","Data Desert" ) 
   
@@ -1274,7 +1170,6 @@ map_df <- df_plot %>%
     coord_equal() +
     theme_map(base_size=12) +
     labs(
-      #title=str_wrap(title,100),
       caption = 'Source: SPI',
       fill='Classification'
     )
@@ -1330,6 +1225,8 @@ Note: Share of countries within a region or income group that are classified as 
 ## Table 4. Longitudinal Relationships between Number of Papers Using Data and Statistical Performance
 
 ```{r index_weights}
+
+#define some weights for the longitudinal SPI that is built
 
 #Pillar 1 - Overall Weight
 pillar_1 <- 1/5
@@ -1445,24 +1342,6 @@ sci_supplement_df <- readxl::read_excel(paste0(raw_data, "/misc/Statistical_Capa
     values_fill=as.numeric(NA)
   )
 
-# sci_indicators <- c("2.01.01.02.nabase", # National accounts base year
-#                     "2.01.03.01.prcpbase", #Consumer price index base year
-#                     "2.04.01.01.excncpt", # Balance of payments manual in use
-#                     "3.01.04.01.agcen", # Agricultural census
-#                     "3.02.01.02.fscov", # Government finance accounting
-#                     "3.11.01.01.popcen",   #Population census
-#                     "3.11.01.03.popreg", #Vital registration system coverage
-#                     "5.04.01.01.exdebt", #External debt reporting status
-#                     "5.13.01.01.hlthsurv", #Health survey
-#                     "5.14.01.01.povsurv", #Poverty survey
-#                     "5.21.01.01.sdds") #Special Data Dissemination Standard)
-# 
-# sci_supplement_df <- wb_data(
-#   indicator=sci_indicators,
-#   start_date=2004,
-#   end_date=2020,
-#   country="countries_only"
-# )
 
 reg_pan <- country_scores_annual_df %>%
   left_join(sci_supplement_df) %>%
@@ -1502,7 +1381,6 @@ models <- list(
   '(2)'=feols(log(data_papers_3yr) ~ log(SP.POP.TOTL) | country + year, data=reg_pan_extended) ,  
   '(3)'=feols(log(data_papers_3yr) ~ SPI.INDEX | country + year, data=reg_pan_fixed) ,  
   '(4)'=feols(log(data_papers_3yr) ~ SPI.INDEX + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL)  | country + year, data=reg_pan_fixed),
-  #'(6)'=lm_robust(log(data_papers) ~ SPI.INDEX + SPI.INDEX.PIL2 + SPI.INDEX.PIL3 + SPI.INDEX.PIL4 + SPI.INDEX.PIL5 , data=reg_pan_fixed) ,  
   '(5)'=feols(log(data_papers_3yr) ~ SPI.INDEX.LONG + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country  + year, data=reg_pan_extended),
   '(6)'=feols(log(data_papers_3yr) ~  SPI.INDEX.PIL4.LONG  + log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL) | country  + year, data=reg_pan_extended)
   )
@@ -1549,7 +1427,6 @@ modelsummary(models,
               **=0.01 level
               *=0.05 level
               +=0.1 level",
-             #gof_map = gm,
              escape = FALSE,
              fmt = 2,
              output='flextable'
@@ -1736,7 +1613,6 @@ index_df <- data_use_df %>%
       #make nice looking
       index_tab <- index_df %>%
         flextable() %>%
-        # add_header_lines('SPI overall score in 2020 and Pillar Scores.') %>%
         set_header_labels(values=list(
                              country="Country",
                              data_use_pcap_3yr="Articles using data per million persons",
@@ -1769,8 +1645,6 @@ das_porteous_compare_df <- read_csv(paste0(raw_data, "/das_porteous_compare.csv"
          porteous_papers=`Porteous All Journals`) %>%
   left_join(country_scores_aggregate_df)
 
-#plot das et al papers against our measrue
-#cor(das_porteous_compare_df$das_papers, das_porteous_compare_df$data_papers_estimate, use='pairwise.complete.obs')
 
 ggplot(das_porteous_compare_df, aes(y=data_papers_estimate, x=das_papers)) +
   geom_point() +
@@ -1793,8 +1667,6 @@ b)	Comparison with Porteous (2020)
 
 ```{r}
 #plot porteous papers against our measrue
-#cor(das_porteous_compare_df$porteous_papers, das_porteous_compare_df$data_papers_estimate, use='pairwise.complete.obs')
-
 
 ggplot((das_porteous_compare_df ), aes(y=data_papers_estimate, x=porteous_papers)) +
   geom_point() +
@@ -1823,7 +1695,6 @@ c)	Comparison with NSF database of scientific and technical articles (2018)
 
 nsf_compare <- read_csv(paste0(raw_data, "/nsf_compare.csv"))
 #plot porteous papers against our measrue
-#cor(nsf_compare$IP.JRN.ARTC.SC, nsf_compare$data_papers_estimate, use='pairwise.complete.obs')
 
 ggplot((nsf_compare ), aes(y=data_papers_estimate, x=IP.JRN.ARTC.SC)) +
   geom_point() +
@@ -1843,7 +1714,7 @@ ggplot((nsf_compare ), aes(y=data_papers_estimate, x=IP.JRN.ARTC.SC)) +
 
 ```{r}
 
-#Goal is to check if there is compensation where countries without data produce more qualitative papers.  Doesn't seem to be much of a systematic relationship.  No relationship between SPI and share of 
+#Goal is to check if there is compensation where countries without data produce more qualitative papers.  
 mod <- lm(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL),  data=country_scores_aggregate_df %>% filter(data_papers>0)) 
 
 
@@ -1865,8 +1736,7 @@ quan_qual_df <- quan_qual_df %>%
 ggplot(quan_qual_df, aes(y=qual_resid, x=resid)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
-  #scale_x_log10(labels=scales::comma) +
-  #scale_y_log10(labels=scales::comma) +
+
   ylab("Qualitative Articles (deviation)") +
   xlab('Data Use Articles (deviation)') +
   geom_smooth(method = "lm") +
@@ -1885,8 +1755,7 @@ ggplot(quan_qual_df, aes(y=qual_resid, x=resid)) +
  ggplot(quan_qual_df, aes(y=qual_gap, x=SPI.INDEX)) +
   geom_point() +
   geom_text_repel(aes(label=iso3c)) +
-  #scale_x_log10(labels=scales::comma) +
-  #scale_y_log10(labels=scales::comma) +
+
   xlab("SPI Overall Score") +
   ylab('Share of Qualitative Papers to Total # of Papers') +
   geom_smooth(method = "lm") +
@@ -1894,11 +1763,7 @@ ggplot(quan_qual_df, aes(y=qual_resid, x=resid)) +
     aes(x = 40, y = 20,label = eq_plot_txt(quan_qual_df, qual_gap,SPI.INDEX)), hjust=0.2, size=4
   ) +
   bbc_style() +
-  labs(title="") +
-  theme(
-    #axis.title.y = element_blank()
-  )
-
+  labs(title="") 
 ```
 
 Figure A.5. Relationship between Data Research and Data Supply
@@ -1934,15 +1799,14 @@ b) Map
 
 ```{r}
 #map of deserts oceans
- #set color pallete
 
 map_df <- df_plot %>%
   right_join(country_metadata)%>%
   mutate(category=if_else(is.na(category), as.character(NA), as.character(category))) 
 
-
+ #set color pallete
   col_pal <- c("#023047","#219ebc","#ffb703","#fb8500")  
-  names(col_pal) <- c("Lake","Oasis","Swamp","Desert" ) 
+  names(col_pal) <- c("Data Lake","Data Oasis","Data Swamp","Data Desert" ) 
   
    p1 <- ggplot() +
     geom_map(data = map_df, aes(map_id = iso3c, fill = category), map = maps$countries) + 
@@ -1964,7 +1828,6 @@ map_df <- df_plot %>%
     coord_equal() +
     theme_map(base_size=12) +
     labs(
-      #title=str_wrap(title,100),
       caption = 'Source: SPI',
       fill='Classification'
     )
