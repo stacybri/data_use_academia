@@ -1,0 +1,31 @@
+wb                      Download Data from the World Bank API
+wb_cache                Download an updated list of country, indicator,
+                        and source information
+wb_cachelist            Cached information from the World Bank API
+wb_cachelist_dep        Cached information from the World Bank API
+wb_data                 Download Data from the World Bank API
+wb_end_point_info       World Bank Information End Points
+wb_indicators           Download Avialable Indicators from the World
+                        Bank
+wb_search               Search indicator information available through
+                        the World Bank API
+wbcache                 Download an updated list of country, indicator,
+                        and source information
+wbcountries             Download updated country and region information
+                        from World Bank API
+wbdatacatalog           Download an updated list of the World Bank data
+                        catalog
+wbincome                Download updated income type information from
+                        World Bank API
+wbindicators            Download updated indicator information from
+                        World Bank API
+wblending               Download updated lending type information from
+                        World Bank API
+wbsearch                Search indicator information available through
+                        the World Bank API
+wbsources               Download updated data source information from
+                        World Bank API
+wbstats                 wbstats: An R package for searching and
+                        downloading data from the World Bank API.
+wbtopics                Download updated indicator topic information
+                        from World Bank API
