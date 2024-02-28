@@ -1,6 +1,6 @@
 ---
 title: "Data Use in Academia"
-date: "May 15 2023"
+date: "February 29 2024"
 date-format: long
 author: Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang
 format: 
@@ -360,7 +360,7 @@ Academia
 ```
 ## Human vs NLP Rankings
 
-![Figure. Comparison of Human Classifications of Data Use to NLP Predictions](./figures/unnamed-chunk-4-1.png)
+![Figure. Comparison of Human Classifications of Data Use to NLP Predictions](./figures/compare_mturk-1.png)
 
 ## Articles Example - No Data Use
 
@@ -382,20 +382,20 @@ De Pasquale, Concetta, Federica Sciacca, and Zira Hichy. "Italian validation of 
 ```
 ## Global Totals
 
-![Figure. Number of Articles using Data by Country (2000-2020)](./figures/unnamed-chunk-8-1.png)
+![Figure. Number of Articles using Data by Country (2000-2020)](./figures/global_totals-1.png)
 
 ## High Income Countries Produce Disproportionate Share
 
-![Figure. Total Number of articles using data by income](./figures/unnamed-chunk-10-1.png)
+![Figure. Total Number of articles using data by income](./figures/income_totals-1.png)
 
 ## Development Outcomes
 
 ::: r-stack
-![](./figures/gdp.png){.fragment width="750" height="550"}
+![](./figures/data_use_outcomes_gdp-1.png){.fragment width="750" height="550"}
 
-![](./figures/population.png){.fragment width="750" height="550"}
+![](./figures/data_use_outcomes_pop-1.png){.fragment width="750" height="550"}
 
-![](./figures/spi.png){.fragment width="750" height="550"}
+![](./figures/data_use_outcomes_spi-1.png){.fragment width="750" height="550"}
 :::
 
 ## More Surveys = Higher Academic Output {.smaller}
@@ -405,50 +405,43 @@ De Pasquale, Concetta, Federica Sciacca, and Zira Hichy. "Italian validation of 
 
 -   Examine using linear regression:
 
-    -   Take advantage of longitudinal nature of data
     -   [Logged number of academic articles per year]{style="color: blue; font-weight: bold"} on LHS
-    -   Hold constant [population size, GDP per capita]{style="color: purple; font-weight: bold"}, [country fixed effects]{style="color: orange; font-weight: bold"}, [time effects]{style="color: brown; font-weight: bold"}
-        -   Use only within country variation in availability of censuses/surveys
-    -   Data from 2004 to 2020
-    -   138 countries with data
+    -   Hold constant [population size, GDP per capita, and # of qualitative papers]{style="color: purple; font-weight: bold"}
+    -   Data from 2017 to 2019
+    -   168 countries with data
+
+-  Also examine using panel regression with country and year fixed effects
+
+$$\color{blue}{log(R_{it})}=\alpha + \beta \color{green}{Sources_{it}} + \gamma_1 \color{purple}{log \_Pop_{it}} + \gamma_2 \color{purple}{log \_GDP \_ pcap_{it}} + \gamma_3 \color{purple}{log \_ qual\_papers_{it}}  + \epsilon_{it} $$
+
 :::
 
-$$\color{blue}{log(R_{it})}=\alpha + \beta \color{green}{Sources_{it}} + \gamma_1 \color{purple}{Pop_{it}} + \gamma_2 \color{purple}{GDP \_ pcap_{it}} + \color{orange}{c_i} + \color{brown}{\eta_t}  + \epsilon_{it} $$
 
-## Longitudinal Regression Results
 
-![Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources. Panel Regression with country and year fixed effects.](./figures/panelplot-2.png)
+
 
 ## Cross Sectional Regression Results
 
-![Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources. Cross Sectional Regression.](./figures/crossplot-2.png)
+![Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources. Cross Sectional Regression.](./figures/paper_reg_data_sources-1.png)
 
-## Country Scores
+## Data Demand and Data Supply
+
+Using similar regressions, we then classified countries into:
 
 ::: incremental
--   Which countries are doing best?
 
--   Compare in three ways:
+-   **Data Deserts**, low data supply and little data research; 
+-   **Data Swamps**,  lots of data available, but not as much research as expected;
+-   **Data Oases**, little data available, but managed to produce lots research using data;
+-   **Data Lakes**, countries with both high data supply and high data research.
 
-    1.  Articles per capita
-    2.  Regression adjusted approach
-
-    -   Adjust for population and GDP per capita
-
-    3.  Share of articles using data
+-   Using this information, countries may prioritize producing more data or making better use of existing data
 :::
 
-## Three approaches correlated
 
-![Figure. Country Scores under alternative scoring approaches](./figures/unnamed-chunk-24-1.png)
+## Data Deserts and Data Swamps
 
-## Regression Adjusted Scores
-
-![Figure. Regression Adjusted Country Scores (2017-2019)](./figures/unnamed-chunk-25-1.png)
-
-## Over/Under Performers
-
-![Figure. Top 15 Over/Underperformers Compared to Population and GDP per capita.](./figures/unnamed-chunk-26-1.png)
+![Figure. Data Deserts and Data Swamps](./figures/data_use_supply_scatter-1.png)
 
 ## Conclusions
 
@@ -463,6 +456,10 @@ $$\color{blue}{log(R_{it})}=\alpha + \beta \color{green}{Sources_{it}} + \gamma_
 -   Scores can help countries understand if statistical system producing data that meets needs of users
 
 ## Appendix
+
+## Longitudinal Regression Results
+
+![Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources. Panel Regression with country and year fixed effects.](./figures/panelplot-1.png)
 
 ## SPI Framework
 

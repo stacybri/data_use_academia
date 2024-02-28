@@ -11,7 +11,7 @@
   <meta name="generator" content="quarto-1.4.550">
 
   <meta name="author" content="Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang">
-  <meta name="dcterms.date" content="2023-05-15">
+  <meta name="dcterms.date" content="2024-02-29">
   <title>Data Use in Academia</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -337,7 +337,7 @@ Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang
 </div>
 </div>
 
-  <p class="date">May 15, 2023</p>
+  <p class="date">February 29, 2024</p>
 </section>
 <section id="background" class="slide level2">
 <h2>Background</h2>
@@ -632,7 +632,7 @@ Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang
 <section id="human-vs-nlp-rankings" class="slide level2">
 <h2>Human vs NLP Rankings</h2>
 
-<img data-src="./figures/unnamed-chunk-4-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Comparison of Human Classifications of Data Use to NLP Predictions</p></section>
+<img data-src="./figures/compare_mturk-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Comparison of Human Classifications of Data Use to NLP Predictions</p></section>
 <section id="articles-example---no-data-use" class="slide level2">
 <h2>Articles Example - No Data Use</h2>
 <pre><code>Perlman, Andrew M.. “The Legal Ethics of Metadata Mining.” Akron law review 43 (2009): 7.</code></pre>
@@ -646,17 +646,17 @@ Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang
 <section id="global-totals" class="slide level2">
 <h2>Global Totals</h2>
 
-<img data-src="./figures/unnamed-chunk-8-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Number of Articles using Data by Country (2000-2020)</p></section>
+<img data-src="./figures/global_totals-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Number of Articles using Data by Country (2000-2020)</p></section>
 <section id="high-income-countries-produce-disproportionate-share" class="slide level2">
 <h2>High Income Countries Produce Disproportionate Share</h2>
 
-<img data-src="./figures/unnamed-chunk-10-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Total Number of articles using data by income</p></section>
+<img data-src="./figures/income_totals-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Total Number of articles using data by income</p></section>
 <section id="development-outcomes" class="slide level2">
 <h2>Development Outcomes</h2>
 <div class="r-stack">
-<p><img data-src="./figures/gdp.png" class="fragment" width="750" height="550"></p>
-<p><img data-src="./figures/population.png" class="fragment" width="750" height="550"></p>
-<p><img data-src="./figures/spi.png" class="fragment" width="750" height="550"></p>
+<p><img data-src="./figures/data_use_outcomes_gdp-1.png" class="fragment" width="750" height="550"></p>
+<p><img data-src="./figures/data_use_outcomes_pop-1.png" class="fragment" width="750" height="550"></p>
+<p><img data-src="./figures/data_use_outcomes_spi-1.png" class="fragment" width="750" height="550"></p>
 </div>
 </section>
 <section id="more-surveys-higher-academic-output" class="slide level2 smaller">
@@ -666,58 +666,37 @@ Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang
 <li class="fragment"><p>Do increases in <span style="color: green; font-weight: bold">availability of data sources</span> lead to more <span style="color: blue; font-weight: bold">articles using data</span>?</p></li>
 <li class="fragment"><p>Examine using linear regression:</p>
 <ul>
-<li class="fragment">Take advantage of longitudinal nature of data</li>
 <li class="fragment"><span style="color: blue; font-weight: bold">Logged number of academic articles per year</span> on LHS</li>
-<li class="fragment">Hold constant <span style="color: purple; font-weight: bold">population size, GDP per capita</span>, <span style="color: orange; font-weight: bold">country fixed effects</span>, <span style="color: brown; font-weight: bold">time effects</span>
-<ul>
-<li class="fragment">Use only within country variation in availability of censuses/surveys</li>
+<li class="fragment">Hold constant <span style="color: purple; font-weight: bold">population size, GDP per capita, and # of qualitative papers</span></li>
+<li class="fragment">Data from 2017 to 2019</li>
+<li class="fragment">168 countries with data</li>
 </ul></li>
-<li class="fragment">Data from 2004 to 2020</li>
-<li class="fragment">138 countries with data</li>
-</ul></li>
+<li class="fragment"><p>Also examine using panel regression with country and year fixed effects</p></li>
 </ul>
+<p><span class="math display">\[\color{blue}{log(R_{it})}=\alpha + \beta \color{green}{Sources_{it}} + \gamma_1 \color{purple}{log \_Pop_{it}} + \gamma_2 \color{purple}{log \_GDP \_ pcap_{it}} + \gamma_3 \color{purple}{log \_ qual\_papers_{it}}  + \epsilon_{it} \]</span></p>
 </div>
-<p><span class="math display">\[\color{blue}{log(R_{it})}=\alpha + \beta \color{green}{Sources_{it}} + \gamma_1 \color{purple}{Pop_{it}} + \gamma_2 \color{purple}{GDP \_ pcap_{it}} + \color{orange}{c_i} + \color{brown}{\eta_t}  + \epsilon_{it} \]</span></p>
 </section>
-<section id="longitudinal-regression-results" class="slide level2">
-<h2>Longitudinal Regression Results</h2>
-
-<img data-src="./figures/panelplot-2.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources. Panel Regression with country and year fixed effects.</p></section>
 <section id="cross-sectional-regression-results" class="slide level2">
 <h2>Cross Sectional Regression Results</h2>
 
-<img data-src="./figures/crossplot-2.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources. Cross Sectional Regression.</p></section>
-<section id="country-scores" class="slide level2">
-<h2>Country Scores</h2>
+<img data-src="./figures/paper_reg_data_sources-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources. Cross Sectional Regression.</p></section>
+<section id="data-demand-and-data-supply" class="slide level2">
+<h2>Data Demand and Data Supply</h2>
+<p>Using similar regressions, we then classified countries into:</p>
 <div>
 <ul>
-<li class="fragment"><p>Which countries are doing best?</p></li>
-<li class="fragment"><p>Compare in three ways:</p>
-<ol type="1">
-<li class="fragment">Articles per capita</li>
-<li class="fragment">Regression adjusted approach</li>
-</ol>
-<ul>
-<li class="fragment">Adjust for population and GDP per capita</li>
-</ul>
-<ol start="3" type="1">
-<li class="fragment">Share of articles using data</li>
-</ol></li>
+<li class="fragment"><p><strong>Data Deserts</strong>, low data supply and little data research;</p></li>
+<li class="fragment"><p><strong>Data Swamps</strong>, lots of data available, but not as much research as expected;</p></li>
+<li class="fragment"><p><strong>Data Oases</strong>, little data available, but managed to produce lots research using data;</p></li>
+<li class="fragment"><p><strong>Data Lakes</strong>, countries with both high data supply and high data research.</p></li>
+<li class="fragment"><p>Using this information, countries may prioritize producing more data or making better use of existing data</p></li>
 </ul>
 </div>
 </section>
-<section id="three-approaches-correlated" class="slide level2">
-<h2>Three approaches correlated</h2>
+<section id="data-deserts-and-data-swamps" class="slide level2">
+<h2>Data Deserts and Data Swamps</h2>
 
-<img data-src="./figures/unnamed-chunk-24-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Country Scores under alternative scoring approaches</p></section>
-<section id="regression-adjusted-scores" class="slide level2">
-<h2>Regression Adjusted Scores</h2>
-
-<img data-src="./figures/unnamed-chunk-25-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Regression Adjusted Country Scores (2017-2019)</p></section>
-<section id="overunder-performers" class="slide level2">
-<h2>Over/Under Performers</h2>
-
-<img data-src="./figures/unnamed-chunk-26-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Top 15 Over/Underperformers Compared to Population and GDP per capita.</p></section>
+<img data-src="./figures/data_use_supply_scatter-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Data Deserts and Data Swamps</p></section>
 <section id="conclusions" class="slide level2">
 <h2>Conclusions</h2>
 <ul>
@@ -731,6 +710,10 @@ Brian Stacy, Lucas Kitzmuller, Daniel Mahler, Umar Serajuddin, and Xiaoyu Wang
 <section id="appendix" class="slide level2">
 <h2>Appendix</h2>
 </section>
+<section id="longitudinal-regression-results" class="slide level2">
+<h2>Longitudinal Regression Results</h2>
+
+<img data-src="./figures/panelplot-1.png" class="r-stretch quarto-figure-center"><p class="caption">Figure. Conditional Relationships between Number of Papers Using Data and Availability of Data Sources. Panel Regression with country and year fixed effects.</p></section>
 <section id="spi-framework-1" class="slide level2">
 <h2>SPI Framework</h2>
 

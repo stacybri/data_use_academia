@@ -5,6 +5,7 @@ date: "`r Sys.Date()`"
 output:
   word_document: 
     number_sections: true
+    keep_md: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -595,7 +596,7 @@ reg_df <- country_scores_recent_df %>% filter(data_papers_estimate>0)
 
 
 
-```{r}
+```{r compare_mturk}
 
 p1 <- ggplot(country_score_mturk_df, aes(x=data_use_class_papers, y=data_use_mturk_papers)) +
   geom_point() +
@@ -637,7 +638,7 @@ nf_stat <- nrow(articles_year_df)-nrow(nf_df)
 ```
 
 
-```{r}
+```{r global_totals}
 spi_mapper('country_scores_aggregate_df', 'data_papers', '')
 ```
 
@@ -647,7 +648,7 @@ spi_mapper('country_scores_aggregate_df', 'data_papers', '')
 
 By Income Group
 
-```{r}
+```{r income_totals}
 
 pop_income_df <- correlates_df %>%
   left_join(country_metadata) %>%
@@ -708,7 +709,7 @@ plt_df <- plt_df %>%
 
 ## Figure 5. Relationship between Papers using Data and Development Outcomes
 
-```{r, fig.width=8, fig.height=12}
+```{r data_use_outcomes, fig.width=8, fig.height=12}
 
 reg_df_fixedn <- reg_df %>%
   filter(!(is.na(NY.GDP.PCAP.PP.KD) | is.na(SP.POP.TOTL) | is.na(SPI.INDEX))) 
@@ -771,7 +772,7 @@ p4 <- ggplot(reg_df, aes(y=data_papers, x=IQ.SPI.PIL4)) +
 
 GDP per capita
 
-```{r, fig.width=9, fig.height=5}
+```{r data_use_outcomes_gdp, fig.width=9, fig.height=5}
 
 p1
 
@@ -779,14 +780,14 @@ p1
 
 Population
 
-```{r, fig.width=9, fig.height=5}
+```{r data_use_outcomes_pop, fig.width=9, fig.height=5}
 p2
 
 ```
 
 SPI Overall Score
 
-```{r, fig.width=9, fig.height=5}
+```{r data_use_outcomes_spi, fig.width=9, fig.height=5}
 p3
 ```
 
@@ -852,7 +853,7 @@ modelsummary(models,
 
 ## Figure 6. Relationship between Number of Papers Using Data and Data Sources 
 
-```{r}
+```{r paper_reg_data_sources}
 
 reg_df_fixedn <- reg_df_fixedn %>%
   mutate(
@@ -991,7 +992,7 @@ sources_summary <- modelsummary(source_models,
 
 ## Figure 7. Relationship between Data Use and Data Supply
 
-```{r}
+```{r data_use_supply}
 
 # # start with per capita
 data_use_df <- country_scores_annual_df %>%
@@ -1085,7 +1086,7 @@ max_x_v2 <- max(df_plot_outl$SPI.INDEX.PIL4_3yr_reg_adjusted_3yr_v2, na.rm = T)
 
 a)Country Scatterplot
 
-```{r}
+```{r data_use_supply_scatter}
 
 # GScatter plot - qual papers - income
 ggplot(df_plot, aes(x = SPI.INDEX.PIL4_3yr, y = data_use_reg_adjusted_3yr_v2)) +
@@ -1139,7 +1140,7 @@ write.csv(df_plot, path, row.names = FALSE)
 
 b) Map
 
-```{r}
+```{r data_use_supply_map}
 #map of deserts oceans
 
 map_df <- df_plot %>%
@@ -1544,7 +1545,7 @@ ggplot(country_scores_aggregate_df, aes(x=data_papers, y=data_papers_nomed)) +
 
 
 ## Figure 10. Correlation in Papers Using Data Across Subjects.  2000-2020.
-```{r, fig.width=10, fig.height=8}
+```{r subject_correlations, fig.width=10, fig.height=8}
 library(GGally)
 
 ggally_df <- country_scores_aggregate_df  %>%
@@ -1638,7 +1639,7 @@ index_tab %>%
 a)	Comparison with Das et al. (2013)
 
 
-```{r}
+```{r das_porteous_compare}
 das_porteous_compare_df <- read_csv(paste0(raw_data, "/das_porteous_compare.csv")) %>%
   rename(country=`Country name`,
          das_papers=`Das Total number of publications (1985–2005)`,
@@ -1665,7 +1666,7 @@ ggplot(das_porteous_compare_df, aes(y=data_papers_estimate, x=das_papers)) +
 
 b)	Comparison with Porteous (2020)
 
-```{r}
+```{r porteous}
 #plot porteous papers against our measrue
 
 ggplot((das_porteous_compare_df ), aes(y=data_papers_estimate, x=porteous_papers)) +
@@ -1712,7 +1713,7 @@ ggplot((nsf_compare ), aes(y=data_papers_estimate, x=IP.JRN.ARTC.SC)) +
 
 ##  Figure A.3. Comparison of the Number of Qualitative and Quantitative Papers
 
-```{r}
+```{r quant_qual}
 
 #Goal is to check if there is compensation where countries without data produce more qualitative papers.  
 mod <- lm(log(data_papers) ~ log(NY.GDP.PCAP.PP.KD) + log(SP.POP.TOTL),  data=country_scores_aggregate_df %>% filter(data_papers>0)) 
@@ -1750,7 +1751,7 @@ ggplot(quan_qual_df, aes(y=qual_resid, x=resid)) +
 
 ## Figure A.4. Share of Qualitative Papers vs SPI Overall Score. 2017-2019. 
 
-```{r}
+```{r qual_papers}
 
  ggplot(quan_qual_df, aes(y=qual_gap, x=SPI.INDEX)) +
   geom_point() +
@@ -1771,7 +1772,7 @@ Figure A.5. Relationship between Data Research and Data Supply
 a) Country Scatterplot
 
 
-```{r}
+```{r data_use_supply_scatter2}
 ggplot(df_plot, aes(x = SPI.INDEX.PIL4_3yr, y = data_papers_pcap_3yr)) +
   geom_point(aes(colour = income_level)) +
   geom_text_repel(aes(label = iso3c)) +
@@ -1797,7 +1798,7 @@ ggsave(path, width = 9, height = 8.1)
 
 b) Map
 
-```{r}
+```{r data_use_supply_map2}
 #map of deserts oceans
 
 map_df <- df_plot %>%
